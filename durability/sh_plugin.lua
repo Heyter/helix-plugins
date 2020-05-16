@@ -4,6 +4,19 @@ PLUGIN.desc = "Adds durability for all weapons."
 
 PLUGIN.maxValue_durability = 100
 
+ix.lang.AddTable("russian", {
+ 	['Repair'] = "Починить",
+	['RepairKitWrong'] = 'У вас нет профессионального набора для ремонта оружия',
+	['DurabilityUnusableTip'] = 'Оружие пришло в негодность!',
+	['DurabilityCondition'] = 'Состояние',
+})
+
+ix.lang.AddTable("english", {
+	['RepairKitWrong'] = 'You do not have a professional weapon repair kit',
+	['DurabilityUnusableTip'] = 'Weapons become unusable!',
+	['DurabilityCondition'] = 'Condition',
+})
+
 if (SERVER) then
 	function PLUGIN:EntityFireBullets(entity, bullet)
 		if (IsValid(entity) and entity:IsPlayer()) then
@@ -20,7 +33,7 @@ if (SERVER) then
 						end
 						
 						if durability < 1 then
-							entity:Notify("Weapons become unusable!")
+							entity:Notify(L('DurabilityUnusableTip'))
 							v:SetData("equip", nil)
 							entity.carryWeapons = entity.carryWeapons or {}
 
@@ -74,7 +87,7 @@ function PLUGIN:InitializedPlugins()
 			
 			function v:GetDescription()
 				local desc = L(self.description or "noDesc")
-				desc = desc .. "\n[*] Condition: " .. self:GetData("durability", max) .. "/" .. max
+				desc = desc .. "\n[*] "..L("DurabilityCondition")..": " .. self:GetData("durability", max) .. "/" .. max
 				return desc
 			end
 		end
@@ -91,9 +104,8 @@ function PLUGIN:InitializedPlugins()
 					has_remnabor:Remove()
 					item:SetData("durability", math.Clamp(item:GetData("durability", max) + 25, 0, max))
 					client:EmitSound("interface/inv_repair_kit.ogg", 80)
-					client:ScreenFade( SCREENFADE.IN, Color( 0, 0, 0 ), 1, 3 )
 				else
-					client:Notify("You do not have a professional weapon repair kit")
+					client:Notify(L("RepairKitWrong"))
 				end	
 
 				has_remnabor = nil
@@ -103,6 +115,10 @@ function PLUGIN:InitializedPlugins()
 			
 			OnCanRun = function(item)
 				if item:GetData("durability", max) >= max then return false end
+				
+				if not item.player:GetCharacter():GetInventory():HasItem("remnabor_weapon") then
+					return false
+				end
 				
 				return true
 			end
