@@ -6,6 +6,8 @@ ix.lang.AddTable("russian", {
  	['Unload mags'] = "Разгрузить обойму"
 })
 
+local cache_ammo = {}
+
 function PLUGIN:InitializedPlugins()
 	for k, v in pairs(ix.item.list) do
 		if v.ammo and v.ammoAmount then
@@ -68,12 +70,16 @@ function PLUGIN:InitializedPlugins()
 							local ammoName = game.GetAmmoName(weapon:GetPrimaryAmmoType())
 							if not ammoName or ammoName == "" then return false end
 							
-							local itemID
-							for k, v in pairs(ix.item.list) do
-								if not v.ammo then continue end
-								if v.ammo:lower() == ammoName:lower() then
-									itemID = k
-									break
+							local itemID = cache_ammo[ammoName]
+							
+							if not itemID then
+								for k, v in pairs(ix.item.list) do
+									if not v.ammo then continue end
+									if v.ammo:lower() == ammoName:lower() then
+										itemID = k
+										cache_ammo[ammoName] = itemID
+										break
+									end
 								end
 							end
 							
