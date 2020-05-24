@@ -88,7 +88,11 @@ function PLUGIN:InitializedPlugins()
 								
 								local ammo = weapon:Clip1()
 								weapon:SetClip1(0)
-								char:GetInventory():Add(itemID, nil, {mags_ammo = ammo})
+								
+								if (!char:GetInventory():Add(itemID, nil, {mags_ammo = ammo})) then
+									ix.item.Spawn(itemID, client)
+								end
+								
 								ammo, itemID = nil, nil
 							end
 						end
