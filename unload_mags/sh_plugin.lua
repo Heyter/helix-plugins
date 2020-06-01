@@ -38,15 +38,11 @@ function PLUGIN:InitializedPlugins()
 
 			if CLIENT then
 				function v:PaintOver(item, w, h)
-					local ammo = item:GetData('mags_ammo', item.ammoAmount)
-					draw.SimpleText(
-						ammo, "DermaDefault",w - 5, h - 5, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 1, color_black
-					)
+					draw.SimpleText(item:GetData('mags_ammo', item.ammoAmount), "DermaDefault",w - 5, h - 5, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 1, color_black)
 				end
 
 				function v:GetDescription()
-					local ammo = self:GetData('mags_ammo', self.ammoAmount)
-					return Format(self.description, ammo)
+					return Format(self.description, self:GetData('mags_ammo', self.ammoAmount))
 				end
 			end
 		elseif v.isWeapon and not v.isGrenade then
@@ -65,12 +61,15 @@ function PLUGIN:InitializedPlugins()
 
 					if (IsValid(weapon) and weapon:Clip1() > 0) then					
 						local char = client:GetCharacter()
+						if not char then return false end
 						
-						if char then
+						local itemID = item.AmmoID
+						
+						if not itemID then
 							local ammoName = game.GetAmmoName(weapon:GetPrimaryAmmoType())
 							if not ammoName or ammoName == "" then return false end
 							
-							local itemID = cache_ammo[ammoName]
+							itemID = cache_ammo[ammoName]
 							
 							if not itemID then
 								for k, v in pairs(ix.item.list) do
@@ -83,22 +82,26 @@ function PLUGIN:InitializedPlugins()
 								end
 							end
 							
-							if itemID then
-								item:SetData('ammo', nil)
-								
-								local ammo = weapon:Clip1()
-								weapon:SetClip1(0)
-								
-								if (!char:GetInventory():Add(itemID, nil, {mags_ammo = ammo})) then
-									ix.item.Spawn(itemID, client)
-								end
-								
-								ammo, itemID = nil, nil
-							end
+							ammoName = nil
 						end
 						
-						weapon = nil
+						if itemID then
+							item:SetData('ammo', nil)
+							local ammo = weapon:Clip1()
+							weapon:SetClip1(0)
+							
+							local tbl = {mags_ammo = ammo}
+							if (!char:GetInventory():Add(itemID, nil, tbl)) then
+								ix.item.Spawn(itemID, client, nil, nil, tbl)
+							end
+							
+							tbl, ammo, itemID = nil, nil, nil
+						end
+
+						char = nil
 					end
+					
+					weapon, client = nil, nil
 					
 					return false
 				end,
