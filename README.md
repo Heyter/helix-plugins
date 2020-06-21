@@ -15,6 +15,6 @@ Unload_Mags (aka Ammo Eject) - Can unload magazines from weapons. (overriding ba
 
 New_Vendors
 
-<p align="center">
+<p>
   <img width="460" height="300" src="https://i.imgur.com/fXeN6BC.png">
 </p>
