@@ -26,7 +26,7 @@ function ENT:Initialize()
 		self.messages = {}
 		self.factions = {}
 		self.classes = {}
-		self.inventory_register = {inv_w = 1, inv_h = 1}
+		self.inventory_size = {w = 1, h = 1}
 
 		self:SetDisplayName("John Doe")
 		self:SetDescription("")

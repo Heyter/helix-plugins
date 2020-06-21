@@ -4,7 +4,7 @@ AccessorFunc(PANEL, "money", "Money", FORCE_NUMBER)
 
 function PANEL:Init()
 	self:DockPadding(1, 1, 1, 1)
-	self:SetTall(64)
+	self:SetTall(22)
 	self:Dock(BOTTOM)
 
 	self.moneyLabel = self:Add("DLabel")
@@ -82,12 +82,14 @@ function PANEL:OnChildAdded(panel)
 	panel:SetPaintedManually(true)
 end
 
-function PANEL:SetupClient(inventory, money)
+function PANEL:SetLocalInventory(inventory)
 	if (IsValid(ix.gui.inv1) and !IsValid(ix.gui.menu)) then
 		ix.gui.inv1:SetInventory(inventory)
 		ix.gui.inv1:SetPos(self:GetWide() / 2 + self:GetFrameMargin() / 2, self:GetTall() / 2 - ix.gui.inv1:GetTall() / 2)
 	end
-	
+end
+
+function PANEL:SetLocalMoney(money)
 	if (!self.localMoney:IsVisible()) then
 		self.localMoney:SetVisible(true)
 		ix.gui.inv1:SetTall(ix.gui.inv1:GetTall() + self.localMoney:GetTall() + 2)
@@ -96,26 +98,27 @@ function PANEL:SetupClient(inventory, money)
 	self.localMoney:SetMoney(money)
 end
 
-function PANEL:SetupVendor(entity)
-	self.entity = entity
-	
-	self:SetTitle("Vendor")
-	self.vendorInventory:SetTitle(entity:GetDisplayName())
-	
-	self.vendorInventory:SetInventory(entity:GetInventory())
+function PANEL:SetVendorTitle(title)
+	self.vendorInventory:SetTitle(title)
+end
+
+function PANEL:SetVendorInventory(inventory)
+	self.vendorInventory:SetInventory(inventory)
 	self.vendorInventory:SetPos(
 		self:GetWide() / 2 - self.vendorInventory:GetWide() - 2,
 		self:GetTall() / 2 - self.vendorInventory:GetTall() / 2
 	)
-	
+
+	ix.gui["inv" .. inventory:GetID()] = self.vendorInventory
+end
+
+function PANEL:SetVendorMoney(money)
 	if (!self.vendorMoney:IsVisible()) then
 		self.vendorMoney:SetVisible(true)
 		self.vendorInventory:SetTall(self.vendorInventory:GetTall() + self.vendorMoney:GetTall() + 2)
 	end
 
-	self.vendorMoney:SetMoney(entity.money)
-
-	ix.gui["inv" .. entity:GetID()] = self.vendorInventory
+	self.vendorMoney:SetMoney(money)
 end
 
 function PANEL:Paint(width, height)
@@ -148,6 +151,10 @@ function PANEL:OnRemove()
 end
 
 function PANEL:Think()
+	if (!IsValid(self)) then
+		return
+	end
+	
 	local entity = self.entity
 
 	if (!IsValid(entity)) then
@@ -156,7 +163,7 @@ function PANEL:Think()
 	end
 
 	if ((self.nextUpdate or 0) < CurTime()) then
-		self.vendorInventory:SetTitle(entity:GetDisplayName())
+		self:SetVendorTitle(entity:GetDisplayName())
 		self.localMoney:SetMoney(LocalPlayer():GetCharacter():GetMoney())
 		self.vendorMoney:SetMoney(entity.money)
 

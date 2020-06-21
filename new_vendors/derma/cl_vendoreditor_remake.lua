@@ -106,57 +106,6 @@ function PANEL:Init()
 			end)
 		end
 	end
-	
-	self.invWslide = self:Add("DNumSlider")
-	self.invWslide:Dock(TOP)
-	self.invWslide:DockMargin(0, 4, 0, 0)
-	self.invWslide:SetText("Inventory Width")
-	self.invWslide.Label:SetTextColor(color_white)
-	self.invWslide.TextArea:SetTextColor(color_white)
-	self.invWslide:SetDecimals(0)
-	self.invWslide.noSend = true
-	self.invWslide:SetValue(entity.inventory_register.inv_w)
-	self.invWslide:SetMinMax(1, 50)
-	self.invWslide.OnValueChanged = function(this, value)
-		if (this.noSend) then
-			this.noSend = nil
-		else
-			timer.Create("ixVendorRemakeInvW", 1, 1, function()
-				if (IsValid(self) and IsValid(self.invWslide)) then
-					value = self.invWslide:GetValue()
-
-					if (value ~= entity.inventory_register.inv_w) then
-						self:updateVendor("inventory_size", {value, entity.inventory_register.inv_h})
-					end
-				end
-			end)
-		end
-	end
-	
-	self.invHslide = self:Add("DNumSlider")
-	self.invHslide:Dock(TOP)
-	self.invHslide:DockMargin(0, 4, 0, 0)
-	self.invHslide:SetText("Inventory Height")
-	self.invHslide.Label:SetTextColor(color_white)
-	self.invHslide.TextArea:SetTextColor(color_white)
-	self.invHslide:SetDecimals(0)
-	self.invHslide.noSend = true
-	self.invHslide:SetValue(entity.inventory_register.inv_h)
-	self.invHslide:SetMinMax(1, 50)
-	self.invHslide.OnValueChanged = function(this, value)
-		if (this.noSend) then
-			this.noSend = nil
-		else
-			timer.Create("ixVendorRemakeInvH", 1, 1, function()
-				if (IsValid(self) and IsValid(self.invHslide)) then
-					value = self.invHslide:GetValue()
-					if (value ~= entity.inventory_register.inv_h) then
-						self:updateVendor("inventory_size", {entity.inventory_register.inv_w, value})
-					end
-				end
-			end)
-		end
-	end
 
 	self.faction = self:Add("DButton")
 	self.faction:SetText(L"vendorFaction")
@@ -172,6 +121,22 @@ function PANEL:Init()
 		ix.gui.editorFaction.updateVendor = self.updateVendor
 		ix.gui.editorFaction.entity = entity
 		ix.gui.editorFaction:Setup()
+	end
+	
+	self.inventory = self:Add("DButton")
+	self.inventory:SetText(L"vendorTitleInvSize")
+	self.inventory:Dock(TOP)
+	self.inventory:SetTextColor(color_white)
+	self.inventory:DockMargin(0, 4, 0, 0)
+	self.inventory.DoClick = function(this)
+		if (IsValid(ix.gui.editorInventory)) then
+			ix.gui.editorInventory:Remove()
+		end
+
+		ix.gui.editorInventory = vgui.Create("ixVendorInventoryEditor")
+		ix.gui.editorInventory.updateVendor = self.updateVendor
+		ix.gui.editorInventory.entity = entity
+		ix.gui.editorInventory:Setup()
 	end
 
 	local menu
@@ -297,6 +262,10 @@ function PANEL:OnRemove()
 
 	if (IsValid(ix.gui.editorFaction)) then
 		ix.gui.editorFaction:Remove()
+	end
+	
+	if (IsValid(ix.gui.editorInventory)) then
+		ix.gui.editorInventory:Remove()
 	end
 end
 
