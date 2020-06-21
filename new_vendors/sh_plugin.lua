@@ -1,0 +1,865 @@
+local PLUGIN = PLUGIN
+
+PLUGIN.name = "RE:Vendors"
+PLUGIN.author = "Chessnut, Hikka"
+PLUGIN.description = "Adds NPC vendors that can sell things."
+
+CAMI.RegisterPrivilege({
+	Name = "Helix - Manage Vendors",
+	MinAccess = "admin"
+})
+
+PLUGIN.VENDOR = {
+	SELLANDBUY = 1, -- Sell and buy the item.
+	SELLONLY = 2, -- Only sell the item to the player.
+	BUYONLY = 3, -- Only buy the item from the player.
+	PRICE = 1,
+	STOCK = 2,
+	MODE = 3,
+	MAXSTOCK = 4,
+	NOTRADE = 3,
+	WELCOME = 1
+}
+
+function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
+	if curInv and newInventory then
+		if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
+			if not curInv.slots then
+				return true -- META:Add()
+			end
+			
+			local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
+			if (IsValid(client)) then
+				local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
+				return hasAccess
+			end
+			
+			return false
+		end
+	end
+end
+
+if (SERVER) then	
+	util.AddNetworkString("ixVendorRemakeOpen")
+	util.AddNetworkString("ixVendorRemakeClose")
+	util.AddNetworkString("ixVendorRemakeExpired")
+	util.AddNetworkString("ixVendorRemakeEditor")
+	util.AddNetworkString("ixVendorRemakeEditFinish")
+	util.AddNetworkString("ixVendorRemakeEdit")
+	util.AddNetworkString("ixVendorRemakeTrade")
+	util.AddNetworkString("ixVendorRemakeStock")
+	util.AddNetworkString("ixVendorRemakeMoney")
+	
+	ix.log.AddType("vendorCharacterTraded", function(client, ...)
+		local arg = {...}
+		return string.format("%s %s '%s' to the vendor '%s'.", client:Name(), arg[3] == true and "selling" or "purchased", arg[2], arg[1])
+	end)
+	
+	ix.log.AddType("vendorRemakeUse", function(client, ...)
+		local arg = {...}
+		return string.format("%s used the '%s' vendor.", client:Name(), arg[1])
+	end)
+
+	function PLUGIN:SaveData()
+		local data = {}
+
+		for _, entity in ipairs(ents.FindByClass("ix_vendor_new")) do
+			local inventory = entity:GetInventory()
+
+			if (inventory) then
+				local bodygroups = {}
+
+				for _, v in ipairs(entity:GetBodyGroups() or {}) do
+					bodygroups[v.id] = entity:GetBodygroup(v.id)
+				end
+			
+				data[#data + 1] = {
+					name = entity:GetDisplayName(),
+					description = entity:GetDescription(),
+					pos = entity:GetPos(),
+					angles = entity:GetAngles(),
+					model = entity:GetModel(),
+					skin = entity:GetSkin(),
+					bodygroups = bodygroups,
+					bubble = entity:GetNoBubble(),
+					inventory_id = inventory:GetID(),
+					items = entity.items,
+					factions = entity.factions,
+					classes = entity.classes,
+					money = entity.money,
+					scale = entity.scale,
+					inventory_register = {inv_w = entity.inventory_register.inv_w or 1, inv_h = entity.inventory_register.inv_h or 1}
+				}
+			end
+		end
+		
+		self:SetData(data)
+	end
+	
+	function PLUGIN:CharacterVendorTraded(client, vendor, uniqueID, isSellingToVendor)		
+		ix.log.Add(client, "vendorCharacterTraded", vendor:GetDisplayName(), uniqueID, isSellingToVendor)
+	end
+
+	function PLUGIN:VendorRemakeRemoved(entity, inventory)
+		if (inventory) then
+			local receivers = inventory:GetReceivers()
+
+			if (#receivers > 0) then
+				net.Start("ixVendorRemakeExpired")
+					net.WriteUInt(inventory:GetID(), 32)
+				net.Send(receivers)
+			end
+		end
+		
+		self:SaveData()
+	end
+
+	function PLUGIN:LoadData()
+		for _, v in ipairs(self:GetData() or {}) do
+			local inventoryID = tonumber(v.inventory_id)
+
+			if (!inventoryID or inventoryID < 1) then
+				ErrorNoHalt(string.format("[Helix] Attempted to restore container inventory with invalid inventory ID '%s'\n", tostring(inventoryID)))
+				continue
+			end
+
+			local entity = ents.Create("ix_vendor_new")
+			entity:SetPos(v.pos)
+			entity:SetAngles(v.angles)
+			entity:Spawn()
+			
+			entity:SetModel(v.model)
+			entity:SetSkin(v.skin or 0)
+			entity:SetSolid(SOLID_BBOX)
+			entity:PhysicsInit(SOLID_BBOX)
+			
+			local physObj = entity:GetPhysicsObject()
+
+			if (IsValid(physObj)) then
+				physObj:EnableMotion(false)
+				physObj:Sleep()
+			end
+
+			entity:SetNoBubble(v.bubble)
+			entity:SetDisplayName(v.name or "John Doe")
+			entity:SetDescription(v.description)
+			
+			for id, bodygroup in pairs(v.bodygroups or {}) do
+				entity:SetBodygroup(id, bodygroup)
+			end
+			
+			entity.inventory_register = {inv_w = v.inv_w or 1, inv_h = v.inv_h or 1}
+
+			ix.item.RestoreInv(inventoryID, v.inv_w, v.inv_h, function(inventory)
+				inventory.vars.isNewVendor = true
+
+				if (IsValid(entity)) then
+					entity:SetInventory(inventory)
+				end
+			end)
+
+			local items = {}
+
+			for uniqueID, data in pairs(v.items) do
+				items[tostring(uniqueID)] = data
+			end
+
+			entity.items = items
+			entity.factions = v.factions or {}
+			entity.classes = v.classes or {}
+			entity.money = v.money
+			entity.scale = v.scale or 0.5
+		end
+	end
+	
+	net.Receive("ixVendorRemakeClose", function(len, client)
+		local entity = client.ixOpenVendorRemake
+		if (IsValid(entity)) then
+			local inventory = entity:GetInventory()
+			if (inventory) then
+				inventory:RemoveReceiver(client)
+			end
+			
+			for k, v in ipairs(entity.receivers) do
+				if (v == client) then
+					table.remove(entity.receivers, k)
+					break
+				end
+			end
+			
+			client.ixOpenVendorRemake = nil
+		end
+	end)
+	
+	local function UpdateEditReceivers(receivers, key, value)
+		net.Start("ixVendorRemakeEdit")
+			net.WriteString(key)
+			net.WriteType(value)
+		net.Send(receivers)
+	end
+	-- SERVER
+	net.Receive("ixVendorRemakeEdit", function(len, client)
+		if (!CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)) then
+			return
+		end
+		
+		local entity = client.ixOpenVendorRemake
+		if (!IsValid(entity)) then
+			return
+		end
+		
+		local key = net.ReadString()
+		local data = net.ReadType()
+		local feedback = true
+		
+		if (key == "name") then
+			entity:SetDisplayName(data)
+		elseif (key == 'inventory_size') then
+			local w, h = math.floor(data[1]), math.floor(data[2])
+			entity.inventory_register = {inv_w = w, inv_h = h}
+
+			timer.Create("ixVendorRemakeRestoreInvSize", 1, 1, function()
+				entity:OnRemoveInventory()
+				
+				ix.item.RestoreInv(entity:GetID(), w, h, function(inventory)
+					inventory.vars.isNewVendor = true
+
+					if (IsValid(entity)) then
+						entity:SetInventory(inventory)
+						
+						for k, v in ipairs(entity.receivers) do
+							inventory:Sync(v)
+						end
+						
+						local character = client:GetCharacter()
+						if (character) then
+							character:GetInventory():Sync(client, true)
+						end
+					end
+				end)
+			end)
+		elseif (key == "remove_inv_item") then
+			if (IsValid(entity)) then
+				entity:GetInventory():Remove(data)
+			end
+		elseif (key == "description") then
+			entity:SetDescription(data)
+		elseif (key == "bubble") then
+			entity:SetNoBubble(data)
+		elseif (key == "mode") then
+			local uniqueID = data[1]
+			if (!entity:GetInventory():Add(uniqueID)) then
+				feedback = false
+			else
+				entity.items[uniqueID] = entity.items[uniqueID] or {}
+				entity.items[uniqueID][PLUGIN.VENDOR.MODE] = data[2]
+			end
+
+			UpdateEditReceivers(entity.receivers, key, data)
+		elseif (key == "price") then
+			local uniqueID = data[1]
+			data[2] = tonumber(data[2])
+
+			if (data[2]) then
+				data[2] = math.Round(data[2])
+			end
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+			entity.items[uniqueID][PLUGIN.VENDOR.PRICE] = data[2]
+
+			UpdateEditReceivers(entity.receivers, key, data)
+
+			data = uniqueID
+		elseif (key == "stockDisable") then
+			local uniqueID = data[1]
+
+			entity.items[data] = entity.items[uniqueID] or {}
+			entity.items[data][PLUGIN.VENDOR.MAXSTOCK] = nil
+
+			UpdateEditReceivers(entity.receivers, key, data)
+		elseif (key == "stockMax") then
+			local uniqueID = data[1]
+			data[2] = math.max(math.Round(tonumber(data[2]) or 1), 1)
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+			entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = data[2]
+			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = math.Clamp(entity.items[uniqueID][PLUGIN.VENDOR.STOCK] or data[2], 1, data[2])
+
+			data[3] = entity.items[uniqueID][PLUGIN.VENDOR.STOCK]
+
+			UpdateEditReceivers(entity.receivers, key, data)
+
+			data = uniqueID
+		elseif (key == "stock") then
+			local uniqueID = data[1]
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+
+			if (!entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+				data[2] = math.max(math.Round(tonumber(data[2]) or 0), 0)
+				entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = data[2]
+			end
+
+			data[2] = math.Clamp(math.Round(tonumber(data[2]) or 0), 0, entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK])
+			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = data[2]
+
+			UpdateEditReceivers(entity.receivers, key, data)
+
+			data = uniqueID
+		elseif (key == "faction") then
+			local faction = ix.faction.teams[data]
+
+			if (faction) then
+				entity.factions[data] = !entity.factions[data]
+
+				if (!entity.factions[data]) then
+					entity.factions[data] = nil
+				end
+			end
+
+			local uniqueID = data
+			data = {uniqueID, entity.factions[uniqueID]}
+		elseif (key == "class") then
+			local class
+
+			for _, v in ipairs(ix.class.list) do
+				if (v.uniqueID == data) then
+					class = v
+
+					break
+				end
+			end
+
+			if (class) then
+				entity.classes[data] = !entity.classes[data]
+
+				if (!entity.classes[data]) then
+					entity.classes[data] = nil
+				end
+			end
+
+			local uniqueID = data
+			data = {uniqueID, entity.classes[uniqueID]}
+		elseif (key == "model") then
+			entity:SetModel(data)
+			entity:SetSolid(SOLID_BBOX)
+			entity:PhysicsInit(SOLID_BBOX)
+			entity:SetAnim()
+			
+			timer.Create("ixVendorRemakeUpdateInvType", 1, 1, function()
+				local mdl = tostring(entity:GetModel()):lower()
+				local query = mysql:Update("ix_inventories")
+					query:Update("inventory_type", "vendor_new:"..mdl)
+					query:Where("inventory_id", entity:GetID())
+				query:Execute()
+				query, mdl = nil, nil
+			end)
+		
+		elseif (key == "useMoney") then
+			if (entity.money) then
+				entity:SetMoney()
+			else
+				entity:SetMoney(0)
+			end
+		elseif (key == "money") then
+			data = math.Round(math.abs(tonumber(data) or 0))
+
+			entity:SetMoney(data)
+			feedback = false
+		elseif (key == "scale") then
+			data = tonumber(data) or 0.5
+
+			entity.scale = data
+
+			UpdateEditReceivers(entity.receivers, key, data)
+		end
+
+		PLUGIN:SaveData()
+
+		if (feedback) then
+			local receivers = {}
+
+			for _, v in ipairs(entity.receivers) do
+				if (CAMI.PlayerHasAccess(v, "Helix - Manage Vendors", nil)) then
+					receivers[#receivers + 1] = v
+				end
+			end
+
+			net.Start("ixVendorRemakeEditFinish")
+				net.WriteString(key)
+				net.WriteType(data)
+			net.Send(receivers)
+			receivers = nil
+		end
+	end)
+	
+	net.Receive("ixVendorRemakeTrade", function(length, client)
+		if ((client.ixVendorTry or 0) < CurTime()) then
+			client.ixVendorTry = CurTime() + 0.33
+		else
+			return
+		end
+
+		local entity = client.ixOpenVendorRemake
+
+		if (!IsValid(entity) or client:GetPos():Distance(entity:GetPos()) > 192) then
+			return
+		end
+
+		local itemID = net.ReadUInt(32)
+		local isSellingToVendor = net.ReadBool()
+		
+		local itemData = ix.item.instances[itemID]
+		local uniqueID = itemData.uniqueID
+
+		if (entity.items[uniqueID] and
+			hook.Run("CanPlayerTradeWithVendor", client, entity, uniqueID, isSellingToVendor) != false) then
+			local price = entity:GetPrice(uniqueID, isSellingToVendor)
+
+			if (isSellingToVendor) then
+				local found = false
+				local name
+
+				if (!entity:HasMoney(price)) then
+					return client:NotifyLocalized("vendorNoMoney")
+				end
+
+				local invOkay = true
+
+				for _, v in pairs(client:GetCharacter():GetInventory():GetItems()) do
+					if (v.id == itemID and v:GetID() != 0 and ix.item.instances[v:GetID()] and v:GetData("equip", false) == false) then
+						invOkay = v:Remove()
+						found = true
+						name = L(v.name, client)
+
+						break
+					end
+				end
+
+				if (!found) then
+					return
+				end
+
+				if (!invOkay) then
+					client:GetCharacter():GetInventory():Sync(client, true)
+					return client:NotifyLocalized("tellAdmin", "trd!iid")
+				end
+
+				client:GetCharacter():GiveMoney(price)
+				client:NotifyLocalized("businessSell", name, ix.currency.Get(price))
+				entity:TakeMoney(price)
+				entity:AddStock(uniqueID)
+
+				PLUGIN:SaveData()
+				hook.Run("CharacterVendorTraded", client, entity, uniqueID, isSellingToVendor)
+			else
+				local stock = entity:GetStock(uniqueID)
+
+				if (stock and stock < 1) then
+					return client:NotifyLocalized("vendorNoStock")
+				end
+
+				if (!client:GetCharacter():HasMoney(price)) then
+					return client:NotifyLocalized("canNotAfford")
+				end
+
+				local name = L(ix.item.list[uniqueID].name, client)
+
+				client:GetCharacter():TakeMoney(price)
+				client:NotifyLocalized("businessPurchase", name, ix.currency.Get(price))
+
+				entity:GiveMoney(price)
+
+				if (!client:GetCharacter():GetInventory():Add(uniqueID)) then
+					ix.item.Spawn(uniqueID, client)
+				end
+
+				entity:TakeStock(uniqueID)
+
+				PLUGIN:SaveData()
+				hook.Run("CharacterVendorTraded", client, entity, uniqueID, isSellingToVendor)
+			end
+		else
+			client:NotifyLocalized("vendorNoTrade")
+		end
+	end)
+else
+	VENDOR_TEXT = {}
+	VENDOR_TEXT[PLUGIN.VENDOR.SELLANDBUY] = "vendorBoth"
+	VENDOR_TEXT[PLUGIN.VENDOR.BUYONLY] = "vendorBuy"
+	VENDOR_TEXT[PLUGIN.VENDOR.SELLONLY] = "vendorSell"
+	
+	function PLUGIN:CreateItemInteractionMenu(item_panel, menu, itemTable)
+		local invID = item_panel.inventoryID
+		local inventory = ix.item.inventories[invID]
+		if inventory.vars.isNewVendor then
+			menu = DermaMenu()
+			
+			menu:AddOption(L"purchase", function()
+				net.Start("ixVendorRemakeTrade")
+					net.WriteUInt(itemTable.id, 32)
+					net.WriteBool(false)
+				net.SendToServer()
+			end):SetImage("icon16/basket_put.png")
+			
+			if IsValid(ix.gui.vendorRemakeEditor) then
+				menu:AddOption("Remove item", function()
+					ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", itemTable.id)
+				end):SetImage("icon16/basket_delete.png")
+			end
+			
+			menu:Open()
+			
+			return true
+		end
+		
+		if IsValid(ix.gui.vendorRemake) then
+			menu = DermaMenu()
+			
+			menu:AddOption(L"sell", function()
+				net.Start("ixVendorRemakeTrade")
+					net.WriteUInt(itemTable.id, 32)
+					net.WriteBool(true)
+				net.SendToServer()
+			end):SetImage("icon16/basket_remove.png")
+			
+			menu:Open()
+			return true
+		end
+	end
+	
+	net.Receive("ixVendorRemakeEdit", function()
+		local panel = ix.gui.vendorRemake
+
+		if (!IsValid(panel)) then
+			return
+		end
+
+		local entity = panel.entity
+
+		if (!IsValid(entity)) then
+			return
+		end
+
+		local key = net.ReadString()
+		local data = net.ReadType()
+
+		if (key == "mode") then
+			entity.items[data[1]] = entity.items[data[1]] or {}
+			entity.items[data[1]][PLUGIN.VENDOR.MODE] = data[2]
+
+			-- if (!data[2]) then
+				-- panel:removeItem(data[1])
+			-- elseif (data[2] == PLUGIN.VENDOR.SELLANDBUY) then
+				-- panel:addItem(data[1])
+			-- else
+				-- panel:addItem(data[1], data[2] == PLUGIN.VENDOR.SELLONLY and "selling" or "buying")
+				-- panel:removeItem(data[1], data[2] == PLUGIN.VENDOR.SELLONLY and "buying" or "selling")
+			-- end
+		elseif (key == 'inventory_size') then
+			entity.inventory_register = {inv_w = math.floor(data[1]), inv_h = math.floor(data[2])}
+		elseif (key == "price") then
+			local uniqueID = data[1]
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+			entity.items[uniqueID][PLUGIN.VENDOR.PRICE] = tonumber(data[2])
+		elseif (key == "stockDisable") then
+			if (entity.items[data]) then
+				entity.items[data][PLUGIN.VENDOR.MAXSTOCK] = nil
+			end
+		elseif (key == "stockMax") then
+			local uniqueID = data[1]
+			local value = data[2]
+			local current = data[3]
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+			entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = value
+			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = current
+		elseif (key == "stock") then
+			local uniqueID = data[1]
+			local value = data[2]
+
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+
+			if (!entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+				entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = value
+			end
+
+			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = value
+		elseif (key == "scale") then
+			entity.scale = data
+		end
+	end)
+
+	net.Receive("ixVendorRemakeEditFinish", function()
+		local panel = ix.gui.vendorRemake
+		local editor = ix.gui.vendorRemakeEditor
+
+		if (!IsValid(panel) or !IsValid(editor)) then
+			return
+		end
+
+		local entity = panel.entity
+
+		if (!IsValid(entity)) then
+			return
+		end
+
+		local key = net.ReadString()
+		local data = net.ReadType()
+
+		if (key == "name") then
+			editor.name:SetText(data)
+		elseif (key == 'inventory_size') then
+			entity.inventory_register = {inv_w = math.floor(data[1]), inv_h = math.floor(data[2])}
+			
+			editor.invWslide.noSend = true
+			editor.invWslide:SetValue(entity.inventory_register.inv_w)
+			
+			editor.invHslide.noSend = true
+			editor.invHslide:SetValue(entity.inventory_register.inv_h)
+		elseif (key == "description") then
+			editor.description:SetText(data)
+		elseif (key == "bubble") then
+			editor.bubble.noSend = true
+			editor.bubble:SetValue(data and 1 or 0)
+		-- elseif (key == "money") then
+			-- panel.vendorMoney:SetMoney(data)
+		elseif (key == "mode") then
+			if (data[2] == nil) then
+				editor.lines[data[1]]:SetValue(2, L"none")
+			else
+				editor.lines[data[1]]:SetValue(2, L(VENDOR_TEXT[data[2]]))
+			end
+		elseif (key == "price") then
+			editor.lines[data]:SetValue(3, entity:GetPrice(data))
+		elseif (key == "stockDisable") then
+			editor.lines[data]:SetValue(4, "-")
+		elseif (key == "stockMax" or key == "stock") then
+			local current, max = entity:GetStock(data)
+
+			editor.lines[data]:SetValue(4, current.."/"..max)
+		elseif (key == "faction") then
+			local uniqueID = data[1]
+			local state = data[2]
+			local editPanel = ix.gui.editorFaction
+
+			entity.factions[uniqueID] = state
+
+			if (IsValid(editPanel) and IsValid(editPanel.factions[uniqueID])) then
+				editPanel.factions[uniqueID]:SetChecked(state == true)
+			end
+		elseif (key == "class") then
+			local uniqueID = data[1]
+			local state = data[2]
+			local editPanel = ix.gui.editorFaction
+
+			entity.classes[uniqueID] = state
+
+			if (IsValid(editPanel) and IsValid(editPanel.classes[uniqueID])) then
+				editPanel.classes[uniqueID]:SetChecked(state == true)
+			end
+		elseif (key == "model") then
+			editor.model:SetText(entity:GetModel())
+		elseif (key == "scale") then
+			editor.sellScale.noSend = true
+			editor.sellScale:SetValue(data)
+		end
+
+		surface.PlaySound("buttons/button14.wav")
+	end)
+
+	net.Receive("ixVendorRemakeOpen", function()
+		if (IsValid(ix.gui.menu)) then
+			net.Start("ixVendorRemakeClose")
+			net.SendToServer()
+			return
+		end
+		
+		local entity = net.ReadEntity()
+		
+		if (!IsValid(entity)) then
+			return
+		end
+		
+		entity.money = net.ReadUInt(16)
+		entity.items = net.ReadTable()
+
+		local inventory = entity:GetInventory()
+		if (inventory and inventory.slots) then
+			if IsValid(ix.gui.vendorRemake) then
+				ix.gui.vendorRemake:Remove()
+			end
+			
+			local localInventory = LocalPlayer():GetCharacter():GetInventory()
+			ix.gui.vendorRemake = vgui.Create("ixVendorRemakeView")
+			
+			if (localInventory) then
+				ix.gui.vendorRemake:SetupClient(localInventory, LocalPlayer():GetCharacter():GetMoney())
+			end
+			
+			ix.gui.vendorRemake:SetupVendor(entity)
+		end
+	end)
+	
+	net.Receive("ixVendorRemakeEditor", function()
+		local entity = net.ReadEntity()
+
+		if (!IsValid(entity) or !CAMI.PlayerHasAccess(LocalPlayer(), "Helix - Manage Vendors", nil)) then
+			return
+		end
+
+		entity.money = net.ReadUInt(16)
+		entity.items = net.ReadTable()
+		entity.scale = net.ReadFloat()
+		entity.messages = net.ReadTable()
+		entity.factions = net.ReadTable()
+		entity.classes = net.ReadTable()
+		entity.inventory_register = net.ReadTable()
+		
+		local inventory = entity:GetInventory()
+		if (inventory and inventory.slots) then
+			if IsValid(ix.gui.vendorRemake) then
+				ix.gui.vendorRemake:Remove()
+			end
+			
+			local localInventory = LocalPlayer():GetCharacter():GetInventory()
+			ix.gui.vendorRemake = vgui.Create("ixVendorRemakeView")
+			
+			if (localInventory) then
+				ix.gui.vendorRemake:SetupClient(localInventory, LocalPlayer():GetCharacter():GetMoney())
+			end
+			
+			ix.gui.vendorRemake:SetupVendor(entity)
+			ix.gui.vendorRemakeEditor = vgui.Create("ixVendorRemakeEditor")
+		end
+	end)
+	
+	net.Receive("ixVendorRemakeExpired", function()
+		if (IsValid(ix.gui.inv1) and not IsValid(ix.gui.menu)) then
+			ix.gui.inv1:Remove()
+		end
+		
+		if (IsValid(PLUGIN.lootingPanelMain)) then
+			PLUGIN.lootingPanelMain:Remove()
+		end
+
+		local id = net.ReadUInt(32)
+		if (id ~= 0) then
+			ix.item.inventories[id] = nil
+		end
+	end)
+	
+	net.Receive("ixVendorRemakeMoney", function()
+		local panel = ix.gui.vendorRemake
+
+		if (!IsValid(panel)) then
+			return
+		end
+
+		local entity = panel.entity
+
+		if (!IsValid(entity)) then
+			return
+		end
+
+		local value = net.ReadUInt(16)
+		value = value != -1 and value or nil
+		entity.money = value
+
+		local editor = ix.gui.vendorRemakeEditor
+
+		if (IsValid(editor)) then
+			local useMoney = tonumber(value) != nil
+
+			editor.money:SetDisabled(!useMoney)
+			editor.money:SetEnabled(useMoney)
+			editor.money:SetText(useMoney and value or "∞")
+		end
+	end)
+
+	net.Receive("ixVendorRemakeStock", function()
+		local panel = ix.gui.vendorRemake
+
+		if (!IsValid(panel)) then
+			return
+		end
+
+		local entity = panel.entity
+
+		if (!IsValid(entity)) then
+			return
+		end
+
+		local uniqueID = net.ReadString()
+		local amount = net.ReadUInt(16)
+
+		entity.items[uniqueID] = entity.items[uniqueID] or {}
+		entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = amount
+
+		local editor = ix.gui.vendorRemakeEditor
+
+		if (IsValid(editor)) then
+			local _, max = entity:GetStock(uniqueID)
+
+			editor.lines[uniqueID]:SetValue(4, amount .. "/" .. max)
+		end
+	end)
+end
+
+properties.Add("vendor_edit", {
+	MenuLabel = "Edit Vendor",
+	Order = 999,
+	MenuIcon = "icon16/user_edit.png",
+
+	Filter = function(self, entity, client)
+		if (!IsValid(entity)) then return false end
+		if (entity:GetClass() ~= "ix_vendor_new") then return false end
+		if (!gamemode.Call( "CanProperty", client, "vendor_edit", entity)) then return false end
+
+		return CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
+	end,
+
+	Action = function(self, entity)
+		self:MsgStart()
+			net.WriteEntity(entity)
+		self:MsgEnd()
+	end,
+
+	Receive = function(self, length, client)
+		local entity = net.ReadEntity()
+
+		if (!IsValid(entity)) then return end
+		if (!self:Filter(entity, client)) then return end
+
+		local itemsTable = {}
+
+		for k, v in pairs(entity.items) do
+			if (!table.IsEmpty(v)) then
+				itemsTable[k] = v
+			end
+		end
+
+		-- Open Inventory
+		local character = client:GetCharacter()
+		if (character) then
+			character:GetInventory():Sync(client, true)
+		end
+			
+		entity:GetInventory():AddReceiver(client)
+		entity.receivers[#entity.receivers + 1] = client
+		client.ixOpenVendorRemake = entity
+		entity:GetInventory():Sync(client)
+
+		net.Start("ixVendorRemakeEditor")
+			net.WriteEntity(entity)
+			net.WriteUInt(entity.money or 0, 16)
+			net.WriteTable(itemsTable)
+			net.WriteFloat(entity.scale or 0.5)
+			net.WriteTable(entity.messages)
+			net.WriteTable(entity.factions)
+			net.WriteTable(entity.classes)
+			net.WriteTable(entity.inventory_register)
+		net.Send(client)
+	end
+})
