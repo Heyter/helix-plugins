@@ -807,7 +807,7 @@ else
 	end)
 end
 
-properties.Add("vendor_edit", {
+properties.Add("vendor_remake_edit", {
 	MenuLabel = "Edit Vendor",
 	Order = 999,
 	MenuIcon = "icon16/user_edit.png",
