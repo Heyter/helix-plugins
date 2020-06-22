@@ -3,5 +3,5 @@
 ### TODO
 
  - Visual design for inventory vendor
- - Clean code
- - Fix inventory size
+
+https://imgur.com/a/2t7QBsU
