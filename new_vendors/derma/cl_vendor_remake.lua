@@ -21,10 +21,7 @@ function PANEL:Init()
 end
 
 function PANEL:SetMoney(money)
-	local name = string.gsub(ix.util.ExpandCamelCase(ix.currency.plural), "%s", "")
-
-	self.money = math.max(math.Round(tonumber(money) or 0), 0)
-	self.moneyLabel:SetText(string.format("%s: %d", name, money))
+	self.moneyLabel:SetText(ix.currency.Get(money))
 end
 
 function PANEL:Paint(width, height)
