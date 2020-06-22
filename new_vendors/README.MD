@@ -4,4 +4,4 @@
 
  - Visual design for inventory vendor
 
-!['o' output](https://imgur.com/a/2t7QBsU)
+![https://imgur.com/a/2t7QBsU](https://imgur.com/a/2t7QBsU)
