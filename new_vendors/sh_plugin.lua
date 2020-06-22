@@ -10,6 +10,7 @@ ix.lang.AddTable("russian", {
 	['vendorSlideHInvSize'] = "Высота",
 	['vendorResizeBtnInvSize'] = "Изменить размер",
 	['vendorRemoveItemEditor'] = "Удалить",
+	['vendorHasMaxStock'] = "Торговец имеет максимальное кол-во этого товара!"
 })
 
 ix.lang.AddTable("english", {
@@ -18,6 +19,7 @@ ix.lang.AddTable("english", {
 	['vendorSlideHInvSize'] = "Height",
 	['vendorResizeBtnInvSize'] = "Resize",
 	['vendorRemoveItemEditor'] = "Remove item",
+	['vendorHasMaxStock'] = "This vendor have max stock that item!"
 })
 
 CAMI.RegisterPrivilege({
@@ -25,7 +27,7 @@ CAMI.RegisterPrivilege({
 	MinAccess = "admin"
 })
 
-PLUGIN.VENDOR = {
+VENDOR = {
 	SELLANDBUY = 1, -- Sell and buy the item.
 	SELLONLY = 2, -- Only sell the item to the player.
 	BUYONLY = 3, -- Only buy the item from the player.
@@ -36,6 +38,127 @@ PLUGIN.VENDOR = {
 	NOTRADE = 3,
 	WELCOME = 1
 }
+
+if CLIENT then
+	local stockPnl, pricePnl = nil, nil
+	local intPriceVendor = 0
+	function PLUGIN:PopulateItemTooltip( tooltip, item )
+		if not item.invID then return end
+		
+		local panel = ix.gui.vendorRemake
+		if (IsValid(panel)) then
+			local entity = panel.entity
+			if IsValid(entity) and entity.items[item.uniqueID] then
+				local info = entity.items[item.uniqueID]
+				local inventory = ix.item.GetInv(item.invID)
+				
+				if inventory and inventory.slots and inventory.vars then
+					intPriceVendor = entity:GetPrice(item.uniqueID, not inventory.vars.isNewVendor)
+					intPriceVendor = ix.currency.Get(intPriceVendor)
+					
+					pricePnl = tooltip:AddRowAfter("name", "priceVendor")
+					
+					if inventory.vars.isNewVendor then
+						pricePnl:SetText(L"purchase".." ("..intPriceVendor..")")
+					else
+					-- elseif not inventory.vars.isNewVendor and IsValid(ix.gui.inv1) and not IsValid(ix.gui.menu) then
+						pricePnl:SetText(L"sell".." ("..intPriceVendor..")")
+					end
+					pricePnl:SetBackgroundColor(derma.GetColor("Warning", panel))
+					pricePnl:SizeToContents()
+					
+					if (inventory.vars.isNewVendor and info[VENDOR.MAXSTOCK]) then
+						if IsValid(pricePnl) then
+							stockPnl = tooltip:AddRowAfter("priceVendor", "stockVendor")
+						else
+							stockPnl = tooltip:AddRowAfter("name", "stockVendor")
+						end
+						
+						stockPnl:SetText(string.format("%s: %d/%d", L'stock', info[VENDOR.STOCK], info[VENDOR.MAXSTOCK]))
+						stockPnl:SetBackgroundColor(derma.GetColor("Error", panel))
+						stockPnl:SizeToContents()
+					end
+				end
+			end
+		end
+	end
+	
+	function PLUGIN:InventoryItemOnDrop(itemObject, curInv, newInventory)
+		if curInv and newInventory then
+			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
+				if (newInventory == curInv) then
+					return
+				end
+				
+				if IsValid(ix.gui.vendorRemake) then -- sell / purchase that item
+					net.Start("ixVendorRemakeTrade")
+						net.WriteUInt(itemObject.id, 32)
+						if curInv.vars.isNewVendor then -- purchase item to vendor
+							net.WriteBool(false)
+						elseif newInventory.vars.isNewVendor then -- sell item to vendor
+							net.WriteBool(true)
+						end
+					net.SendToServer()
+				end
+			end
+		end
+	end
+end
+
+-- later...maybe
+--[[ if CLIENT then
+	function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
+		if curInv and newInventory then
+			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
+				if not curInv.slots then
+					return true -- META:Add()
+				end
+				
+				local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
+				if (IsValid(client)) then
+					local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
+					if IsValid(ix.gui.vendorRemakeEditor) then -- if player edit vendor
+						return hasAccess
+					end
+					
+					if IsValid(ix.gui.vendorRemake) then -- sell / purchase that item
+						net.Start("ixVendorRemakeTrade")
+							net.WriteUInt(itemObject.id, 32)
+							
+							if curInv.vars.isNewVendor then -- purchase item to vendor
+								net.WriteBool(false)
+							elseif newInventory.vars.isNewVendor then -- sell item to vendor
+								net.WriteBool(true)
+							end
+						net.SendToServer()
+						
+						return false
+					end
+				end
+				
+				return false
+			end
+		end
+	end
+else
+	function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
+		if curInv and newInventory then
+			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
+				if not curInv.slots then
+					return true -- META:Add()
+				end
+				
+				local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
+				if (IsValid(client)) then
+					local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
+					return hasAccess
+				end
+				
+				return false
+			end
+		end
+	end
+end ]]
 
 function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
 	if curInv and newInventory then
@@ -227,21 +350,26 @@ if (SERVER) then
 		elseif (key == 'inventory_size') then
 			entity:OnRemoveInventory()
 			
+			local strModel = tostring(entity:GetModel()):lower()
+			local x, y = math.floor(data[1]), math.floor(data[2])
+			
 			timer.Create("ixVendorRemakeRestoreInvSize", 1, 1, function()
-				ix.item.RestoreInv(entity:GetID(), math.floor(data[1]), math.floor(data[2]), function(inventory)
-					inventory.vars.isNewVendor = true
+				ix.item.NewInv(0, "vendor_new:"..strModel, function(inv)
+					ix.item.RestoreInv(inv:GetID(), x, y, function(inventory)
+						inventory.vars.isNewVendor = true
 
-					if (IsValid(entity)) then
-						entity:SetInventory(inventory)
-						entity.inventory_size = {w = inventory.w, h = inventory.h}
-						
-						for k, v in ipairs(entity.receivers) do
-							inventory:AddReceiver(v)
-							inventory:Sync(v)
+						if (IsValid(entity)) then
+							entity:SetInventory(inventory)
+							entity.inventory_size = {w = inventory.w, h = inventory.h}
+							
+							for k, v in ipairs(entity.receivers) do
+								inventory:AddReceiver(v)
+								inventory:Sync(v)
+							end
+							
+							UpdateEditReceivers(entity.receivers, key, value)
 						end
-						
-						UpdateEditReceivers(entity.receivers, key, value)
-					end
+					end)
 				end)
 			end)
 			
@@ -261,7 +389,7 @@ if (SERVER) then
 				feedback = false
 			else
 				entity.items[uniqueID] = entity.items[uniqueID] or {}
-				entity.items[uniqueID][PLUGIN.VENDOR.MODE] = data[2]
+				entity.items[uniqueID][VENDOR.MODE] = data[2]
 			end
 
 			UpdateEditReceivers(entity.receivers, key, data)
@@ -274,7 +402,7 @@ if (SERVER) then
 			end
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
-			entity.items[uniqueID][PLUGIN.VENDOR.PRICE] = data[2]
+			entity.items[uniqueID][VENDOR.PRICE] = data[2]
 
 			UpdateEditReceivers(entity.receivers, key, data)
 
@@ -283,7 +411,7 @@ if (SERVER) then
 			local uniqueID = data[1]
 
 			entity.items[data] = entity.items[uniqueID] or {}
-			entity.items[data][PLUGIN.VENDOR.MAXSTOCK] = nil
+			entity.items[data][VENDOR.MAXSTOCK] = nil
 
 			UpdateEditReceivers(entity.receivers, key, data)
 		elseif (key == "stockMax") then
@@ -291,10 +419,10 @@ if (SERVER) then
 			data[2] = math.max(math.Round(tonumber(data[2]) or 1), 1)
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
-			entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = data[2]
-			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = math.Clamp(entity.items[uniqueID][PLUGIN.VENDOR.STOCK] or data[2], 1, data[2])
+			entity.items[uniqueID][VENDOR.MAXSTOCK] = data[2]
+			entity.items[uniqueID][VENDOR.STOCK] = math.Clamp(entity.items[uniqueID][VENDOR.STOCK] or data[2], 1, data[2])
 
-			data[3] = entity.items[uniqueID][PLUGIN.VENDOR.STOCK]
+			data[3] = entity.items[uniqueID][VENDOR.STOCK]
 
 			UpdateEditReceivers(entity.receivers, key, data)
 
@@ -304,13 +432,13 @@ if (SERVER) then
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
 
-			if (!entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+			if (!entity.items[uniqueID][VENDOR.MAXSTOCK]) then
 				data[2] = math.max(math.Round(tonumber(data[2]) or 0), 0)
-				entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = data[2]
+				entity.items[uniqueID][VENDOR.MAXSTOCK] = data[2]
 			end
 
-			data[2] = math.Clamp(math.Round(tonumber(data[2]) or 0), 0, entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK])
-			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = data[2]
+			data[2] = math.Clamp(math.Round(tonumber(data[2]) or 0), 0, entity.items[uniqueID][VENDOR.MAXSTOCK])
+			entity.items[uniqueID][VENDOR.STOCK] = data[2]
 
 			UpdateEditReceivers(entity.receivers, key, data)
 
@@ -356,12 +484,12 @@ if (SERVER) then
 			entity:SetAnim()
 			
 			timer.Create("ixVendorRemakeUpdateInvType", 1, 1, function()
-				local mdl = tostring(entity:GetModel()):lower()
+				local strModel = tostring(entity:GetModel()):lower()
 				local query = mysql:Update("ix_inventories")
-					query:Update("inventory_type", "vendor_new:"..mdl)
+					query:Update("inventory_type", "vendor_new:"..strModel)
 					query:Where("inventory_id", entity:GetID())
 				query:Execute()
-				query, mdl = nil, nil
+				query, strModel = nil, nil
 			end)
 		
 		elseif (key == "useMoney") then
@@ -432,6 +560,12 @@ if (SERVER) then
 				if (!entity:HasMoney(price)) then
 					return client:NotifyLocalized("vendorNoMoney")
 				end
+				
+				-- TODO: Add check if vendor have max stock that item
+				-- local stock, stockMax = entity:GetStock(uniqueID)
+				-- if (entity.ignoreMaxStockSell and stock and stock >= stockMax) then
+					-- return client:NotifyLocalized("vendorHasMaxStock")
+				-- end
 
 				local invOkay = true
 
@@ -494,9 +628,9 @@ if (SERVER) then
 	end)
 else
 	VENDOR_TEXT = {}
-	VENDOR_TEXT[PLUGIN.VENDOR.SELLANDBUY] = "vendorBoth"
-	VENDOR_TEXT[PLUGIN.VENDOR.BUYONLY] = "vendorBuy"
-	VENDOR_TEXT[PLUGIN.VENDOR.SELLONLY] = "vendorSell"
+	VENDOR_TEXT[VENDOR.SELLANDBUY] = "vendorBoth"
+	VENDOR_TEXT[VENDOR.BUYONLY] = "vendorBuy"
+	VENDOR_TEXT[VENDOR.SELLONLY] = "vendorSell"
 	
 	function PLUGIN:CreateItemInteractionMenu(item_panel, menu, itemTable)
 		local invID = item_panel.inventoryID
@@ -555,15 +689,15 @@ else
 
 		if (key == "mode") then
 			entity.items[data[1]] = entity.items[data[1]] or {}
-			entity.items[data[1]][PLUGIN.VENDOR.MODE] = data[2]
+			entity.items[data[1]][VENDOR.MODE] = data[2]
 
 			-- if (!data[2]) then
 				-- panel:removeItem(data[1])
-			-- elseif (data[2] == PLUGIN.VENDOR.SELLANDBUY) then
+			-- elseif (data[2] == VENDOR.SELLANDBUY) then
 				-- panel:addItem(data[1])
 			-- else
-				-- panel:addItem(data[1], data[2] == PLUGIN.VENDOR.SELLONLY and "selling" or "buying")
-				-- panel:removeItem(data[1], data[2] == PLUGIN.VENDOR.SELLONLY and "buying" or "selling")
+				-- panel:addItem(data[1], data[2] == VENDOR.SELLONLY and "selling" or "buying")
+				-- panel:removeItem(data[1], data[2] == VENDOR.SELLONLY and "buying" or "selling")
 			-- end
 		elseif (key == 'inventory_size') then
 			if (!IsValid(ix.gui.menu) and IsValid(ix.gui.vendorRemake)) then
@@ -574,10 +708,10 @@ else
 			local uniqueID = data[1]
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
-			entity.items[uniqueID][PLUGIN.VENDOR.PRICE] = tonumber(data[2])
+			entity.items[uniqueID][VENDOR.PRICE] = tonumber(data[2])
 		elseif (key == "stockDisable") then
 			if (entity.items[data]) then
-				entity.items[data][PLUGIN.VENDOR.MAXSTOCK] = nil
+				entity.items[data][VENDOR.MAXSTOCK] = nil
 			end
 		elseif (key == "stockMax") then
 			local uniqueID = data[1]
@@ -585,19 +719,19 @@ else
 			local current = data[3]
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
-			entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = value
-			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = current
+			entity.items[uniqueID][VENDOR.MAXSTOCK] = value
+			entity.items[uniqueID][VENDOR.STOCK] = current
 		elseif (key == "stock") then
 			local uniqueID = data[1]
 			local value = data[2]
 
 			entity.items[uniqueID] = entity.items[uniqueID] or {}
 
-			if (!entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
-				entity.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK] = value
+			if (!entity.items[uniqueID][VENDOR.MAXSTOCK]) then
+				entity.items[uniqueID][VENDOR.MAXSTOCK] = value
 			end
 
-			entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = value
+			entity.items[uniqueID][VENDOR.STOCK] = value
 		elseif (key == "scale") then
 			entity.scale = data
 		end
@@ -800,7 +934,7 @@ else
 		local amount = net.ReadUInt(16)
 
 		entity.items[uniqueID] = entity.items[uniqueID] or {}
-		entity.items[uniqueID][PLUGIN.VENDOR.STOCK] = amount
+		entity.items[uniqueID][VENDOR.STOCK] = amount
 
 		local editor = ix.gui.vendorRemakeEditor
 
@@ -820,7 +954,7 @@ properties.Add("vendor_remake_edit", {
 	Filter = function(self, entity, client)
 		if (!IsValid(entity)) then return false end
 		if (entity:GetClass() ~= "ix_vendor_new") then return false end
-		if (!gamemode.Call( "CanProperty", client, "vendor_edit", entity)) then return false end
+		if (!gamemode.Call( "CanProperty", client, "vendor_remake_edit", entity)) then return false end
 
 		return CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
 	end,

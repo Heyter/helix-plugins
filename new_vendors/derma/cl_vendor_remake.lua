@@ -151,10 +151,6 @@ function PANEL:OnRemove()
 end
 
 function PANEL:Think()
-	if (!IsValid(self)) then
-		return
-	end
-	
 	local entity = self.entity
 
 	if (!IsValid(entity)) then

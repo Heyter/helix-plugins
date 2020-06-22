@@ -32,13 +32,6 @@ function ENT:Initialize()
 		self:SetDescription("")
 
 		self.receivers = {}
-		
-		local mdl = tostring(self:GetModel()):lower()
-		ix.item.NewInv(0, "vendor_new:"..mdl, function(inventory)
-			inventory.vars.isNewVendor = true
-			self:SetInventory(inventory)
-		end)
-		mdl = nil
 
 		local physObj = self:GetPhysicsObject()
 
@@ -55,68 +48,6 @@ function ENT:Initialize()
 	end)
 end
 
-function ENT:CanAccess(client)
-	local bAccess = false
-	local uniqueID = ix.faction.indices[client:Team()].uniqueID
-
-	if (self.factions and !table.IsEmpty(self.factions)) then
-		if (self.factions[uniqueID]) then
-			bAccess = true
-		else
-			return false
-		end
-	end
-
-	if (bAccess and self.classes and !table.IsEmpty(self.classes)) then
-		local class = ix.class.list[client:GetCharacter():GetClass()]
-		local classID = class and class.uniqueID
-
-		if (classID and !self.classes[classID]) then
-			return false
-		end
-	end
-
-	return true
-end
-
-function ENT:GetStock(uniqueID)
-	if (self.items[uniqueID] and self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
-		return self.items[uniqueID][PLUGIN.VENDOR.STOCK] or 0, self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]
-	end
-end
-
-function ENT:GetPrice(uniqueID, selling)
-	local price = ix.item.list[uniqueID] and self.items[uniqueID] and
-		self.items[uniqueID][PLUGIN.VENDOR.PRICE] or ix.item.list[uniqueID].price or 0
-
-	if (selling) then
-		price = math.floor(price * (self.scale or 0.5))
-	end
-
-	return price
-end
-
-function ENT:HasMoney(amount)
-	-- Vendor not using money system so they can always afford it.
-	if (!self.money) then
-		return true
-	end
-
-	return self.money >= amount
-end
-
-function ENT:SetAnim()
-	for k, v in ipairs(self:GetSequenceList()) do
-		if (v:lower():find("idle") and v != "idlenoise") then
-			return self:ResetSequence(k)
-		end
-	end
-
-	if (self:GetSequenceCount() > 1) then
-		self:ResetSequence(4)
-	end
-end
-
 if (SERVER) then
 	local PLUGIN = PLUGIN
 	
@@ -131,6 +62,11 @@ if (SERVER) then
 		entity:SetAngles(angles)
 		entity:Spawn()
 		
+		ix.item.NewInv(0, "vendor_new:"..tostring(entity:GetModel()):lower(), function(inventory)
+			inventory.vars.isNewVendor = true
+			entity:SetInventory(inventory)
+		end)
+		
 		PLUGIN:SaveData()
 
 		return entity
@@ -141,7 +77,7 @@ if (SERVER) then
 			self:SetID(inventory:GetID())
 			inventory.OnAuthorizeTransfer = function(inventory, client, oldInventory, item)
 				if (IsValid(client) and IsValid(self) and inventory.vars and inventory.vars.isNewVendor) then
-					return client:IsSuperAdmin()
+					return select(1, CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil))
 				end
 			end
 		end
@@ -178,8 +114,8 @@ if (SERVER) then
 
 		if (inventory and (activator.ixNextOpen or 0) < CurTime()) then
 			if (!self:CanAccess(activator) or hook.Run("CanPlayerUseVendor", activator) == false) then
-				if (self.messages[PLUGIN.VENDOR.NOTRADE]) then
-					activator:ChatPrint(self:GetDisplayName()..": "..self.messages[PLUGIN.VENDOR.NOTRADE])
+				if (self.messages[VENDOR.NOTRADE]) then
+					activator:ChatPrint(self:GetDisplayName()..": "..self.messages[VENDOR.NOTRADE])
 				else
 					activator:NotifyLocalized("vendorNoTrade")
 				end
@@ -187,15 +123,15 @@ if (SERVER) then
 				return
 			end
 		
-			if (self.messages[PLUGIN.VENDOR.WELCOME]) then
-				activator:ChatPrint(self:GetDisplayName()..": "..self.messages[PLUGIN.VENDOR.WELCOME])
+			if (self.messages[VENDOR.WELCOME]) then
+				activator:ChatPrint(self:GetDisplayName()..": "..self.messages[VENDOR.WELCOME])
 			end
 			
 			local items = {}
 
 			-- Only send what is needed.
 			for k, v in pairs(self.items) do
-				if (!table.IsEmpty(v) and (CAMI.PlayerHasAccess(activator, "Helix - Manage Vendors", nil) or v[PLUGIN.VENDOR.MODE])) then
+				if (!table.IsEmpty(v) and (CAMI.PlayerHasAccess(activator, "Helix - Manage Vendors", nil) or v[VENDOR.MODE])) then
 					items[k] = v
 				end
 			end
@@ -246,12 +182,12 @@ if (SERVER) then
 	end
 
 	function ENT:SetStock(uniqueID, value)
-		if (!self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+		if (!self.items[uniqueID][VENDOR.MAXSTOCK]) then
 			return
 		end
 
 		self.items[uniqueID] = self.items[uniqueID] or {}
-		self.items[uniqueID][PLUGIN.VENDOR.STOCK] = math.min(value, self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK])
+		self.items[uniqueID][VENDOR.STOCK] = math.min(value, self.items[uniqueID][VENDOR.MAXSTOCK])
 
 		net.Start("ixVendorRemakeStock")
 			net.WriteString(uniqueID)
@@ -260,7 +196,7 @@ if (SERVER) then
 	end
 
 	function ENT:AddStock(uniqueID, value)
-		if (!self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+		if (!self.items[uniqueID][VENDOR.MAXSTOCK]) then
 			return
 		end
 
@@ -268,7 +204,7 @@ if (SERVER) then
 	end
 
 	function ENT:TakeStock(uniqueID, value)
-		if (!self.items[uniqueID][PLUGIN.VENDOR.MAXSTOCK]) then
+		if (!self.items[uniqueID][VENDOR.MAXSTOCK]) then
 			return
 		end
 
@@ -343,4 +279,66 @@ end
 
 function ENT:GetMoney()
 	return self.money
+end
+
+function ENT:CanAccess(client)
+	local bAccess = false
+	local uniqueID = ix.faction.indices[client:Team()].uniqueID
+
+	if (self.factions and !table.IsEmpty(self.factions)) then
+		if (self.factions[uniqueID]) then
+			bAccess = true
+		else
+			return false
+		end
+	end
+
+	if (bAccess and self.classes and !table.IsEmpty(self.classes)) then
+		local class = ix.class.list[client:GetCharacter():GetClass()]
+		local classID = class and class.uniqueID
+
+		if (classID and !self.classes[classID]) then
+			return false
+		end
+	end
+
+	return true
+end
+
+function ENT:GetStock(uniqueID)
+	if (self.items[uniqueID] and self.items[uniqueID][VENDOR.MAXSTOCK]) then
+		return self.items[uniqueID][VENDOR.STOCK] or 0, self.items[uniqueID][VENDOR.MAXSTOCK]
+	end
+end
+
+function ENT:GetPrice(uniqueID, selling)
+	local price = ix.item.list[uniqueID] and self.items[uniqueID] and
+		self.items[uniqueID][VENDOR.PRICE] or ix.item.list[uniqueID].price or 0
+
+	if (selling) then
+		price = math.floor(price * (self.scale or 0.5))
+	end
+
+	return price
+end
+
+function ENT:HasMoney(amount)
+	-- Vendor not using money system so they can always afford it.
+	if (!self.money) then
+		return true
+	end
+
+	return self.money >= amount
+end
+
+function ENT:SetAnim()
+	for k, v in ipairs(self:GetSequenceList()) do
+		if (v:lower():find("idle") and v != "idlenoise") then
+			return self:ResetSequence(k)
+		end
+	end
+
+	if (self:GetSequenceCount() > 1) then
+		self:ResetSequence(4)
+	end
 end

@@ -1,5 +1,3 @@
-local PLUGIN = PLUGIN.VENDOR
-
 local PANEL = {}
 
 function PANEL:Init()
@@ -168,17 +166,17 @@ function PANEL:Init()
 
 			-- Allow the vendor to sell and buy this item.
 			mode:AddOption(L"vendorBoth", function()
-				self:updateVendor("mode", {uniqueID, PLUGIN.SELLANDBUY})
+				self:updateVendor("mode", {uniqueID, VENDOR.SELLANDBUY})
 			end):SetImage("icon16/cog.png")
 
 			-- Only allow the vendor to buy this item from players.
 			mode:AddOption(L"vendorBuy", function()
-				self:updateVendor("mode", {uniqueID, PLUGIN.BUYONLY})
+				self:updateVendor("mode", {uniqueID, VENDOR.BUYONLY})
 			end):SetImage("icon16/cog_delete.png")
 
 			-- Only allow the vendor to sell this item to players.
 			mode:AddOption(L"vendorSell", function()
-				self:updateVendor("mode", {uniqueID, PLUGIN.SELLONLY})
+				self:updateVendor("mode", {uniqueID, VENDOR.SELLONLY})
 			end):SetImage("icon16/cog_add.png")
 
 			local itemTable = ix.item.list[uniqueID]
@@ -241,7 +239,7 @@ function PANEL:Init()
 	self.lines = {}
 
 	for k, v in SortedPairs(ix.item.list) do
-		local mode = entity.items[k] and entity.items[k][PLUGIN.MODE]
+		local mode = entity.items[k] and entity.items[k][VENDOR.MODE]
 		local current, max = entity:GetStock(k)
 		local panel = self.items:AddLine(
 			v.GetName and v:GetName() or L(v.name),
