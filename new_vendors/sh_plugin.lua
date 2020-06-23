@@ -43,13 +43,19 @@ if CLIENT then
 	local stockPnl, pricePnl = nil, nil
 	local intPriceVendor = 0
 	function PLUGIN:PopulateItemTooltip( tooltip, item )
-		if not item.invID then return end
+		if not item.invID then
+			return
+		end
 		
 		local panel = ix.gui.vendorRemake
 		if (IsValid(panel)) then
 			local entity = panel.entity
 			if IsValid(entity) and entity.items[item.uniqueID] then
 				local info = entity.items[item.uniqueID]
+				if not info then
+					return
+				end
+				
 				local inventory = ix.item.GetInv(item.invID)
 				
 				if inventory and inventory.slots and inventory.vars then
@@ -83,82 +89,46 @@ if CLIENT then
 		end
 	end
 	
-	function PLUGIN:InventoryItemOnDrop(itemObject, curInv, newInventory)
+	function PLUGIN:SendTradeToVendor(itemObject, isSellingToVendor)
+		if (not IsValid(ix.gui.vendorRemake) or not itemObject.id) then
+			return
+		end
+		
+		local entity = ix.gui.vendorRemake.entity
+		
+		if (not entity.items[itemObject.uniqueID]) then
+			return
+		end
+		
+		net.Start("ixVendorRemakeTrade")
+			net.WriteUInt(itemObject.id, 32)
+			net.WriteBool(isSellingToVendor)
+		net.SendToServer()
+	end
+	
+	function PLUGIN:InventoryItemOnDrop(itemObject, curInv, newInventory, newX, newY)
 		if curInv and newInventory then
-			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
+			if (newInventory.vars and newInventory.vars.isNewVendor and curInv.slots) or (curInv.vars and curInv.vars.isNewVendor and newInventory.slots) then
 				if (newInventory == curInv) then
 					return
 				end
 				
-				if IsValid(ix.gui.vendorRemake) then -- sell / purchase that item
-					net.Start("ixVendorRemakeTrade")
-						net.WriteUInt(itemObject.id, 32)
-						if curInv.vars.isNewVendor then -- purchase item to vendor
-							net.WriteBool(false)
-						elseif newInventory.vars.isNewVendor then -- sell item to vendor
-							net.WriteBool(true)
-						end
-					net.SendToServer()
+				if IsValid(ix.gui.vendorRemake) and not IsValid(ix.gui.vendorRemakeEditor) then -- sell / purchase that item
+					local entity = ix.gui.vendorRemake.entity
+					if (not entity.items[itemObject.uniqueID]) then
+						return
+					end
+					
+					if curInv.vars.isNewVendor then -- purchase item to vendor
+						self:SendTradeToVendor(itemObject, false)
+					elseif newInventory.vars.isNewVendor then -- sell item to vendor
+						self:SendTradeToVendor(itemObject, true)
+					end
 				end
 			end
 		end
 	end
 end
-
--- later...maybe
---[[ if CLIENT then
-	function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
-		if curInv and newInventory then
-			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
-				if not curInv.slots then
-					return true -- META:Add()
-				end
-				
-				local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
-				if (IsValid(client)) then
-					local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
-					if IsValid(ix.gui.vendorRemakeEditor) then -- if player edit vendor
-						return hasAccess
-					end
-					
-					if IsValid(ix.gui.vendorRemake) then -- sell / purchase that item
-						net.Start("ixVendorRemakeTrade")
-							net.WriteUInt(itemObject.id, 32)
-							
-							if curInv.vars.isNewVendor then -- purchase item to vendor
-								net.WriteBool(false)
-							elseif newInventory.vars.isNewVendor then -- sell item to vendor
-								net.WriteBool(true)
-							end
-						net.SendToServer()
-						
-						return false
-					end
-				end
-				
-				return false
-			end
-		end
-	end
-else
-	function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
-		if curInv and newInventory then
-			if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
-				if not curInv.slots then
-					return true -- META:Add()
-				end
-				
-				local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
-				if (IsValid(client)) then
-					local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
-					return hasAccess
-				end
-				
-				return false
-			end
-		end
-	end
-end ]]
 
 function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
 	if curInv and newInventory then
@@ -639,10 +609,7 @@ else
 			menu = DermaMenu()
 			
 			menu:AddOption(L"purchase", function()
-				net.Start("ixVendorRemakeTrade")
-					net.WriteUInt(itemTable.id, 32)
-					net.WriteBool(false)
-				net.SendToServer()
+				self:SendTradeToVendor(itemTable, false)
 			end):SetImage("icon16/basket_put.png")
 			
 			if IsValid(ix.gui.vendorRemakeEditor) then
@@ -660,10 +627,7 @@ else
 			menu = DermaMenu()
 			
 			menu:AddOption(L"sell", function()
-				net.Start("ixVendorRemakeTrade")
-					net.WriteUInt(itemTable.id, 32)
-					net.WriteBool(true)
-				net.SendToServer()
+				self:SendTradeToVendor(itemTable, true)
 			end):SetImage("icon16/basket_remove.png")
 			
 			menu:Open()
@@ -690,15 +654,6 @@ else
 		if (key == "mode") then
 			entity.items[data[1]] = entity.items[data[1]] or {}
 			entity.items[data[1]][VENDOR.MODE] = data[2]
-
-			-- if (!data[2]) then
-				-- panel:removeItem(data[1])
-			-- elseif (data[2] == VENDOR.SELLANDBUY) then
-				-- panel:addItem(data[1])
-			-- else
-				-- panel:addItem(data[1], data[2] == VENDOR.SELLONLY and "selling" or "buying")
-				-- panel:removeItem(data[1], data[2] == VENDOR.SELLONLY and "buying" or "selling")
-			-- end
 		elseif (key == 'inventory_size') then
 			if (!IsValid(ix.gui.menu) and IsValid(ix.gui.vendorRemake)) then
 				ix.gui.vendorRemake:SetLocalInventory(LocalPlayer():GetCharacter():GetInventory())

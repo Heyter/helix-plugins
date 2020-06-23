@@ -21,6 +21,7 @@ function PANEL:Init()
 end
 
 function PANEL:SetMoney(money)
+	money = math.max(math.Round(tonumber(money) or 0), 0)
 	self.moneyLabel:SetText(ix.currency.Get(money))
 end
 
