@@ -10,7 +10,6 @@ ix.lang.AddTable("russian", {
 	['vendorSlideHInvSize'] = "Высота",
 	['vendorResizeBtnInvSize'] = "Изменить размер",
 	['vendorRemoveItemEditor'] = "Удалить",
-	['vendorHasMaxStock'] = "Торговец имеет максимальное кол-во этого товара!"
 })
 
 ix.lang.AddTable("english", {
@@ -19,7 +18,6 @@ ix.lang.AddTable("english", {
 	['vendorSlideHInvSize'] = "Height",
 	['vendorResizeBtnInvSize'] = "Resize",
 	['vendorRemoveItemEditor'] = "Remove item",
-	['vendorHasMaxStock'] = "This vendor have max stock that item!"
 })
 
 CAMI.RegisterPrivilege({
@@ -106,7 +104,7 @@ if CLIENT then
 		net.SendToServer()
 	end
 	
-	function PLUGIN:InventoryItemOnDrop(itemObject, curInv, newInventory, newX, newY)
+	function PLUGIN:InventoryItemOnDrop(itemObject, curInv, newInventory)
 		if curInv and newInventory then
 			if (newInventory.vars and newInventory.vars.isNewVendor and curInv.slots) or (curInv.vars and curInv.vars.isNewVendor and newInventory.slots) then
 				if (newInventory == curInv) then
@@ -201,7 +199,7 @@ if (SERVER) then
 					classes = entity.classes,
 					money = entity.money,
 					scale = entity.scale,
-					inventory_size = {w = entity.inventory_size.w or 1, h = entity.inventory_size.h or 1}
+					inventory_size = {w = entity.inventory_size.w or 1, h = entity.inventory_size.h or 1},
 				}
 			end
 		end
@@ -530,12 +528,6 @@ if (SERVER) then
 				if (!entity:HasMoney(price)) then
 					return client:NotifyLocalized("vendorNoMoney")
 				end
-				
-				-- TODO: Add check if vendor have max stock that item
-				-- local stock, stockMax = entity:GetStock(uniqueID)
-				-- if (entity.ignoreMaxStockSell and stock and stock >= stockMax) then
-					-- return client:NotifyLocalized("vendorHasMaxStock")
-				-- end
 
 				local invOkay = true
 
@@ -605,32 +597,27 @@ else
 	function PLUGIN:CreateItemInteractionMenu(item_panel, menu, itemTable)
 		local invID = item_panel.inventoryID
 		local inventory = ix.item.inventories[invID]
-		if inventory.vars.isNewVendor then
+		if IsValid(ix.gui.vendorRemake) then
 			menu = DermaMenu()
 			
-			menu:AddOption(L"purchase", function()
-				self:SendTradeToVendor(itemTable, false)
-			end):SetImage("icon16/basket_put.png")
-			
-			if IsValid(ix.gui.vendorRemakeEditor) then
-				menu:AddOption(L"vendorRemoveItemEditor", function()
-					ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", itemTable.id)
-				end):SetImage("icon16/basket_delete.png")
+			if inventory.vars.isNewVendor then
+				menu:AddOption(L"purchase", function()
+					self:SendTradeToVendor(itemTable, false)
+				end):SetImage("icon16/basket_put.png")
+				
+				if IsValid(ix.gui.vendorRemakeEditor) then
+					menu:AddOption(L"vendorRemoveItemEditor", function()
+						ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", itemTable.id)
+					end):SetImage("icon16/basket_delete.png")
+				end
+			else -- client inventory
+				menu:AddOption(L"sell", function()
+					self:SendTradeToVendor(itemTable, true)
+				end):SetImage("icon16/basket_remove.png")
 			end
 			
 			menu:Open()
 			
-			return true
-		end
-		
-		if IsValid(ix.gui.vendorRemake) then
-			menu = DermaMenu()
-			
-			menu:AddOption(L"sell", function()
-				self:SendTradeToVendor(itemTable, true)
-			end):SetImage("icon16/basket_remove.png")
-			
-			menu:Open()
 			return true
 		end
 	end
