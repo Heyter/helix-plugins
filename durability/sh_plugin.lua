@@ -1,8 +1,13 @@
-PLUGIN.name = "Durability - helix"
-PLUGIN.author = "AleXXX_007 ; Hikka"
-PLUGIN.desc = "Adds durability for all weapons."
+local PLUGIN = PLUGIN
 
-PLUGIN.maxValue_durability = 100
+PLUGIN.name = "Durability"
+PLUGIN.author = "AleXXX_007 ; Hikka"
+PLUGIN.description = "Adds durability for all weapons."
+
+ix.config.Add("maxValueDurability", 100, "Maximum value of the durability.", nil, {
+	data = {min = 1, max = 1000},
+	category = PLUGIN.name
+})
 
 ix.lang.AddTable("russian", {
  	['Repair'] = "Починить",
@@ -25,8 +30,8 @@ if (SERVER) then
 			if (weapon) then
 				local inventory = entity:GetCharacter():GetInventory():GetItems()
 				for k, v in pairs(inventory) do
-					if v.class == weapon:GetClass() and v:GetData("equip", false) == true then
-						local durability = v:GetData("durability", self.maxValue_durability)
+					if v.class == weapon:GetClass() and v:GetData("equip", false) then
+						local durability = v:GetData("durability", ix.config.Get("maxValueDurability", 100))
 					
 						if math.random(1, 16) == 1 and durability > 0 then
 							v:SetData("durability", durability - 1)
@@ -65,7 +70,7 @@ if (SERVER) then
 end
 
 function PLUGIN:InitializedPlugins()
-	local max = self.maxValue_durability
+	local max = ix.config.Get("maxValueDurability", 100)
 	
 	for k, v in pairs(ix.item.list) do
 		if not v.isWeapon then continue end
@@ -127,5 +132,5 @@ function PLUGIN:InitializedPlugins()
 end
 
 function PLUGIN:CanPlayerEquipItem(client, item)
-	return item:GetData("durability", self.maxValue_durability) > 0
+	return item:GetData("durability", ix.config.Get("maxValueDurability", 100)) > 0
 end
