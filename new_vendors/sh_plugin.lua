@@ -131,7 +131,7 @@ end
 function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
 	if curInv and newInventory then
 		if (newInventory.vars and newInventory.vars.isNewVendor) or (curInv.vars and curInv.vars.isNewVendor) then
-			if not curInv.slots then
+			if curInv:GetID() == 0 then
 				return true -- META:Add()
 			end
 			
