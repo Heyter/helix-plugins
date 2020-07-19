@@ -515,6 +515,8 @@ if (SERVER) then
 		local isSellingToVendor = net.ReadBool()
 		
 		local itemData = ix.item.instances[itemID]
+		if not itemData then return end
+		
 		local uniqueID = itemData.uniqueID
 
 		if (entity.items[uniqueID] and
