@@ -10,6 +10,7 @@ ix.lang.AddTable("russian", {
 	['vendorSlideHInvSize'] = "Высота",
 	['vendorResizeBtnInvSize'] = "Изменить размер",
 	['vendorRemoveItemEditor'] = "Удалить",
+	['vendorMaxStock'] = "У данного продавца полный запас этого товара!"
 })
 
 ix.lang.AddTable("english", {
@@ -18,6 +19,7 @@ ix.lang.AddTable("english", {
 	['vendorSlideHInvSize'] = "Height",
 	['vendorResizeBtnInvSize'] = "Resize",
 	['vendorRemoveItemEditor'] = "Remove item",
+	['vendorMaxStock'] = "This vendor has full stock of that item!"
 })
 
 CAMI.RegisterPrivilege({
@@ -250,14 +252,12 @@ if (SERVER) then
 			end
 			
 			entity.inventory_size = {w = v.inventory_size.w or 1, h = v.inventory_size.h or 1}
-
-			ix.item.RestoreInv(inventoryID, entity.inventory_size.w, entity.inventory_size.h, function(inventory)
-				inventory.vars.isNewVendor = true
-
-				if (IsValid(entity)) then
-					entity:SetInventory(inventory)
+			entity:BuildInventory(function(inventory)
+				for uniqueID in pairs(v.items) do
+					inventory:Add(tostring(uniqueID), 1, nil, nil, nil, true)
 				end
-			end)
+			end, entity.inventory_size.w, entity.inventory_size.h)
+		
 
 			local items = {}
 
@@ -270,6 +270,8 @@ if (SERVER) then
 			entity.classes = v.classes or {}
 			entity.money = v.money
 			entity.scale = v.scale or 0.5
+			
+			items = nil
 		end
 	end
 	
@@ -319,33 +321,26 @@ if (SERVER) then
 			entity:OnRemoveInventory()
 			
 			local strModel = tostring(entity:GetModel()):lower()
-			local x, y = math.floor(data[1]), math.floor(data[2])
+			local invW, invH = math.floor(data[1]), math.floor(data[2])
 			
 			timer.Create("ixVendorRemakeRestoreInvSize", 1, 1, function()
-				ix.item.NewInv(0, "vendor_new:"..strModel, function(inv)
-					ix.item.RestoreInv(inv:GetID(), x, y, function(inventory)
-						inventory.vars.isNewVendor = true
-
-						if (IsValid(entity)) then
-							entity:SetInventory(inventory)
-							entity.inventory_size = {w = inventory.w, h = inventory.h}
-							
-							for k, v in ipairs(entity.receivers) do
-								inventory:AddReceiver(v)
-								inventory:Sync(v)
-							end
-							
-							UpdateEditReceivers(entity.receivers, key, value)
-						end
-					end)
-				end)
+				entity:BuildInventory(function(inventory)
+					entity.inventory_size = {w = inventory.w, h = inventory.h}
+					
+					for k, v in ipairs(entity.receivers) do
+						inventory:AddReceiver(v)
+						inventory:Sync(v)
+					end
+					
+					UpdateEditReceivers(entity.receivers, key, value)
+				end, invW, invH)
 			end)
 			
 			feedback = false
 		elseif (key == "remove_inv_item") then
 			if (IsValid(entity)) then
-				entity:GetInventory():Remove(data)
-				feedback = false
+				entity:GetInventory():Remove(data[1], nil, true, true)
+				entity.items[data[2]] = nil
 			end
 		elseif (key == "description") then
 			entity:SetDescription(data)
@@ -353,7 +348,9 @@ if (SERVER) then
 			entity:SetNoBubble(data)
 		elseif (key == "mode") then
 			local uniqueID = data[1]
-			if (!entity:GetInventory():Add(uniqueID)) then
+			local inventory = entity:GetInventory()
+			
+			if (inventory:GetItemCount(uniqueID, true) == 0 and !inventory:Add(uniqueID)) then
 				feedback = false
 			else
 				entity.items[uniqueID] = entity.items[uniqueID] or {}
@@ -515,8 +512,6 @@ if (SERVER) then
 		local isSellingToVendor = net.ReadBool()
 		
 		local itemData = ix.item.instances[itemID]
-		if not itemData then return end
-		
 		local uniqueID = itemData.uniqueID
 
 		if (entity.items[uniqueID] and
@@ -529,6 +524,11 @@ if (SERVER) then
 
 				if (!entity:HasMoney(price)) then
 					return client:NotifyLocalized("vendorNoMoney")
+				end
+				
+				local stock, max = entity:GetStock(uniqueID)
+				if (stock and stock >= max) then
+					return client:NotifyLocalized("vendorMaxStock")
 				end
 
 				local invOkay = true
@@ -609,7 +609,7 @@ else
 				
 				if IsValid(ix.gui.vendorRemakeEditor) then
 					menu:AddOption(L"vendorRemoveItemEditor", function()
-						ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", itemTable.id)
+						ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", {itemTable.id, itemTable.uniqueID})
 					end):SetImage("icon16/basket_delete.png")
 				end
 			else -- client inventory
@@ -678,6 +678,8 @@ else
 			entity.items[uniqueID][VENDOR.STOCK] = value
 		elseif (key == "scale") then
 			entity.scale = data
+		elseif (key == "remove_inv_item") then
+			entity.items[data[2]] = nil
 		end
 	end)
 
@@ -744,6 +746,8 @@ else
 		elseif (key == "scale") then
 			editor.sellScale.noSend = true
 			editor.sellScale:SetValue(data)
+		elseif (key == "remove_inv_item") then
+			editor.lines[data[2]]:SetValue(2, L"none")
 		end
 
 		surface.PlaySound("buttons/button14.wav")

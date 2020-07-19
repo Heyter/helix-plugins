@@ -61,15 +61,30 @@ if (SERVER) then
 		entity:SetPos(trace.HitPos)
 		entity:SetAngles(angles)
 		entity:Spawn()
-		
-		ix.item.NewInv(0, "vendor_new:"..tostring(entity:GetModel()):lower(), function(inventory)
-			inventory.vars.isNewVendor = true
-			entity:SetInventory(inventory)
-		end)
+		entity:BuildInventory()
 		
 		PLUGIN:SaveData()
 
 		return entity
+	end
+	
+	function ENT:BuildInventory(callback, w, h)
+		local invID = os.time() + self:EntIndex()
+		
+		if self:GetID() ~= 0 then
+			invID = self:GetID()
+		end
+		
+		local inventory = ix.item.CreateInv(w or 1, h or 1, invID)
+		
+		inventory.vars.isNewVendor = true
+		inventory.noSave = true
+		
+		if (callback) then
+			callback(inventory)
+		end
+
+		self:SetInventory(inventory)
 	end
 	
 	function ENT:SetInventory(inventory)
@@ -77,7 +92,7 @@ if (SERVER) then
 			self:SetID(inventory:GetID())
 			inventory.OnAuthorizeTransfer = function(inventory, client, oldInventory, item)
 				if (IsValid(client) and IsValid(self) and inventory.vars and inventory.vars.isNewVendor) then
-					return select(1, CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil))
+					return false
 				end
 			end
 		end
@@ -91,14 +106,7 @@ if (SERVER) then
 
 			if (inventory) then
 				ix.item.inventories[index] = nil
-
-				local query = mysql:Delete("ix_items")
-					query:Where("inventory_id", index)
-				query:Execute()
-
-				query = mysql:Delete("ix_inventories")
-					query:Where("inventory_id", index)
-				query:Execute()
+				self.items = {}
 
 				hook.Run("VendorRemakeRemoved", self, inventory)
 			end
@@ -143,7 +151,7 @@ if (SERVER) then
 			if (character) then
 				character:GetInventory():Sync(activator, true)
 			end
-			
+
 			inventory:AddReceiver(activator)
 			self.receivers[#self.receivers + 1] = activator
 			activator.ixOpenVendorRemake = self
