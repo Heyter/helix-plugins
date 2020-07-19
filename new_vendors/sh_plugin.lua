@@ -136,18 +136,7 @@ function PLUGIN:CanTransferItem(itemObject, curInv, newInventory)
 			if curInv:GetID() == 0 then
 				return true -- META:Add()
 			end
-			
-			local client = (itemObject.GetOwner and itemObject:GetOwner()) or (newInventory.GetOwner and newInventory:GetOwner())
-			if (IsValid(client)) then
-				local hasAccess = CAMI.PlayerHasAccess(client, "Helix - Manage Vendors", nil)
-				
-				if CLIENT and hasAccess and not IsValid(ix.gui.vendorRemakeEditor) then -- if player don't edit vendor
-					return false
-				end
-				
-				return hasAccess
-			end
-			
+
 			return false
 		end
 	end
@@ -320,7 +309,6 @@ if (SERVER) then
 		elseif (key == 'inventory_size') then
 			entity:OnRemoveInventory()
 			
-			local strModel = tostring(entity:GetModel()):lower()
 			local invW, invH = math.floor(data[1]), math.floor(data[2])
 			
 			timer.Create("ixVendorRemakeRestoreInvSize", 1, 1, function()
@@ -348,13 +336,24 @@ if (SERVER) then
 			entity:SetNoBubble(data)
 		elseif (key == "mode") then
 			local uniqueID = data[1]
+			local mode = data[2]
 			local inventory = entity:GetInventory()
+			local items = inventory:GetItemsByUniqueID(uniqueID, true)
 			
-			if (inventory:GetItemCount(uniqueID, true) == 0 and !inventory:Add(uniqueID)) then
+			if (mode and #items == 0 and !inventory:Add(uniqueID)) then
 				feedback = false
 			else
+				if (not mode and #items > 0) then
+					for _, v in ipairs(items) do
+						if (v.uniqueID == uniqueID) then
+							inventory:Remove(v.id, nil, true, true)
+							break
+						end
+					end
+				end
+				
 				entity.items[uniqueID] = entity.items[uniqueID] or {}
-				entity.items[uniqueID][VENDOR.MODE] = data[2]
+				entity.items[uniqueID][VENDOR.MODE] = mode
 			end
 
 			UpdateEditReceivers(entity.receivers, key, data)
