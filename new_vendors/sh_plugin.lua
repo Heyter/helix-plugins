@@ -242,7 +242,8 @@ if (SERVER) then
 			
 			entity.inventory_size = {w = v.inventory_size.w or 1, h = v.inventory_size.h or 1}
 			entity:BuildInventory(function(inventory)
-				for uniqueID in pairs(v.items) do
+				for uniqueID, data in pairs(v.items) do
+					if (not data or not ix.item.Get(tostring(uniqueID))) then continue end
 					inventory:Add(tostring(uniqueID), 1, nil, nil, nil, true)
 				end
 			end, entity.inventory_size.w, entity.inventory_size.h)
@@ -251,6 +252,7 @@ if (SERVER) then
 			local items = {}
 
 			for uniqueID, data in pairs(v.items) do
+				if (not data or not ix.item.Get(tostring(uniqueID))) then continue end
 				items[tostring(uniqueID)] = data
 			end
 
@@ -512,12 +514,17 @@ if (SERVER) then
 		
 		local itemData = ix.item.instances[itemID]
 		local uniqueID = itemData.uniqueID
-
-		if (entity.items[uniqueID] and
+		local data = entity.items[uniqueID]
+		
+		if (data and
 			hook.Run("CanPlayerTradeWithVendor", client, entity, uniqueID, isSellingToVendor) != false) then
 			local price = entity:GetPrice(uniqueID, isSellingToVendor)
 
 			if (isSellingToVendor) then
+				if (data[VENDOR.MODE] ~= VENDOR.SELLANDBUY and data[VENDOR.MODE] ~= VENDOR.BUYONLY) then
+					return false
+				end
+				
 				local found = false
 				local name
 
@@ -559,6 +566,10 @@ if (SERVER) then
 				PLUGIN:SaveData()
 				hook.Run("CharacterVendorTraded", client, entity, uniqueID, isSellingToVendor)
 			else
+				if (data[VENDOR.MODE] ~= VENDOR.SELLANDBUY and data[VENDOR.MODE] ~= VENDOR.SELLONLY) then
+					return false
+				end
+				
 				local stock = entity:GetStock(uniqueID)
 
 				if (stock and stock < 1) then
@@ -596,31 +607,39 @@ else
 	VENDOR_TEXT[VENDOR.SELLONLY] = "vendorSell"
 	
 	function PLUGIN:CreateItemInteractionMenu(item_panel, menu, itemTable)
-		local invID = item_panel.inventoryID
-		local inventory = ix.item.inventories[invID]
-		if IsValid(ix.gui.vendorRemake) then
-			menu = DermaMenu()
-			
-			if inventory.vars.isNewVendor then
+		if not IsValid(ix.gui.vendorRemake) then
+			return
+		end
+
+		local entity = ix.gui.vendorRemake.entity
+		local inventory = ix.item.inventories[item_panel.inventoryID]
+		local data = entity.items[itemTable.uniqueID] and entity.items[itemTable.uniqueID][VENDOR.MODE] or 0
+		
+		menu = DermaMenu()
+		
+		if inventory.vars.isNewVendor then
+			if (data == VENDOR.SELLANDBUY or data == VENDOR.SELLONLY) then
 				menu:AddOption(L"purchase", function()
 					self:SendTradeToVendor(itemTable, false)
 				end):SetImage("icon16/basket_put.png")
-				
-				if IsValid(ix.gui.vendorRemakeEditor) then
-					menu:AddOption(L"vendorRemoveItemEditor", function()
-						ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", {itemTable.id, itemTable.uniqueID})
-					end):SetImage("icon16/basket_delete.png")
-				end
-			else -- client inventory
+			end
+			
+			if IsValid(ix.gui.vendorRemakeEditor) then
+				menu:AddOption(L"vendorRemoveItemEditor", function()
+					ix.gui.vendorRemakeEditor:updateVendor("remove_inv_item", {itemTable.id, itemTable.uniqueID})
+				end):SetImage("icon16/basket_delete.png")
+			end
+		else -- client inventory
+			if (data == VENDOR.SELLANDBUY or data == VENDOR.BUYONLY) then
 				menu:AddOption(L"sell", function()
 					self:SendTradeToVendor(itemTable, true)
 				end):SetImage("icon16/basket_remove.png")
 			end
-			
-			menu:Open()
-			
-			return true
 		end
+		
+		menu:Open()
+		
+		return true
 	end
 	
 	net.Receive("ixVendorRemakeEdit", function()
@@ -640,8 +659,10 @@ else
 		local data = net.ReadType()
 
 		if (key == "mode") then
-			entity.items[data[1]] = entity.items[data[1]] or {}
-			entity.items[data[1]][VENDOR.MODE] = data[2]
+			local uniqueID = data[1]
+			
+			entity.items[uniqueID] = entity.items[uniqueID] or {}
+			entity.items[uniqueID][VENDOR.MODE] = data[2]
 		elseif (key == 'inventory_size') then
 			if (!IsValid(ix.gui.menu) and IsValid(ix.gui.vendorRemake)) then
 				ix.gui.vendorRemake:SetLocalInventory(LocalPlayer():GetCharacter():GetInventory())
