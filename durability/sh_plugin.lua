@@ -1,25 +1,30 @@
-local PLUGIN = PLUGIN
-
 PLUGIN.name = "Durability"
 PLUGIN.author = "AleXXX_007 ; Hikka"
 PLUGIN.description = "Adds durability for all weapons."
 
 ix.config.Add("maxValueDurability", 100, "Maximum value of the durability.", nil, {
-	data = {min = 1, max = 1000},
+	data = {min = 1, max = 9999},
+	category = PLUGIN.name
+})
+
+ix.config.Add("decDurability", 1, "By how many units do reduce the durability with each shot?", nil, {
+	data = {min = 0.0001, max = 100},
 	category = PLUGIN.name
 })
 
 ix.lang.AddTable("russian", {
  	['Repair'] = "Починить",
-	['RepairKitWrong'] = 'У вас нет профессионального набора для ремонта оружия',
+	['RepairKitWrong'] = 'У вас нет ремкомплекта!',
 	['DurabilityUnusableTip'] = 'Оружие пришло в негодность!',
-	['DurabilityCondition'] = 'Состояние',
+	['DurabilityCondition'] = 'Прочность',
+	['DurabilityArmorTitle'] = "Защита от",
 })
 
 ix.lang.AddTable("english", {
-	['RepairKitWrong'] = 'You do not have a professional weapon repair kit',
+	['RepairKitWrong'] = 'You do not have a repair kit!',
 	['DurabilityUnusableTip'] = 'Weapons become unusable!',
 	['DurabilityCondition'] = 'Condition',
+	['DurabilityArmorTitle'] = "Defence from",
 })
 
 if (SERVER) then
@@ -27,41 +32,27 @@ if (SERVER) then
 		if (IsValid(entity) and entity:IsPlayer()) then
 			local weapon = entity:GetActiveWeapon()
 		
-			if (weapon) then
-				local inventory = entity:GetCharacter():GetInventory():GetItems()
-				for k, v in pairs(inventory) do
-					if v.class == weapon:GetClass() and v:GetData("equip", false) then
-						local durability = v:GetData("durability", ix.config.Get("maxValueDurability", 100))
+			if (IsValid(weapon)) then
+				for _, v in pairs(entity:GetCharacter():GetInventory():GetItems()) do
+					if (v.class == weapon:GetClass() and v:GetData("equip", false)) then
+						local durability = v:GetData("durability", v.maxDurability or ix.config.Get("maxValueDurability", 100))
 					
-						if math.random(1, 16) == 1 and durability > 0 then
-							v:SetData("durability", durability - 1)
+						if (math.random(1, 16) == 2 and durability > 0) then
+							durability = math.max(durability - ix.config.Get("decDurability", 1), 0)
+							v:SetData("durability", durability)
 						end
 						
-						if durability < 1 then
+						if (durability < 1 and v.Unequip) then
+							v:Unequip(entity, false, true)
 							entity:Notify(L('DurabilityUnusableTip'))
-							v:SetData("equip", nil)
-							entity.carryWeapons = entity.carryWeapons or {}
-
-							local weapon = entity.carryWeapons[v.weaponCategory]
-							if (!IsValid(weapon)) then
-								weapon = entity:GetWeapon(v.class)
-							end
-		
-							if (IsValid(weapon)) then
-								v:SetData("ammo", weapon:Clip1())
-
-								entity:StripWeapon(v.class)
-								entity.carryWeapons[v.weaponCategory] = nil
-								entity:EmitSound("items/ammo_pickup.wav", 80)
-								
-								v:RemovePAC(entity)
-							end
 						end
 						
 						bullet.Damage = (bullet.Damage / 100) * durability
-						bullet.Spread = bullet.Spread * (1 + (1 - ((1 / 100) * durability)))
+						bullet.Spread = bullet.Spread * (1 + (1 - (0.01 * durability)))
 						
 						durability = nil
+						
+						break
 					end
 				end
 			end
@@ -69,11 +60,27 @@ if (SERVER) then
 	end
 end
 
-function PLUGIN:InitializedPlugins()
-	local max = ix.config.Get("maxValueDurability", 100)
+function PLUGIN:PopulateItemTooltip(tooltip, item)
+	if (!item.isWeapon) then
+		return
+	end
 	
-	for k, v in pairs(ix.item.list) do
-		if not v.isWeapon then continue end
+	local panel = tooltip:AddRowAfter("description", "durabilityPnl")
+	local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
+	local value = math.Clamp(item:GetData("durability", maxDurability), 0, maxDurability)
+	
+	panel:SetText(Format("%s: %s%% / %s%%", L("DurabilityCondition"), value, maxDurability))
+	panel:SetBackgroundColor(Color(219, 52, 52))
+	panel:SizeToContents()
+end
+
+function PLUGIN:InitializedPlugins()
+	local maxDurability = ix.config.Get("maxValueDurability", 100)
+	
+	for _, v in pairs(ix.item.list) do
+		if (!v.isWeapon) then continue end
+		
+		maxDurability = v.maxDurability or maxDurability
 	
 		if CLIENT then
 			function v:PaintOver(item, w, h)
@@ -82,18 +89,12 @@ function PLUGIN:InitializedPlugins()
 					surface.DrawRect(w - 14, h - 14, 8, 8)
 				end
 				
-				local durability = math.Clamp(item:GetData("durability", max) / max, 0, max)
+				local durability = math.Clamp(item:GetData("durability", maxDurability) / maxDurability, 0, maxDurability)
 				
-				if durability > 0 then
+				if (durability > 0) then
 					surface.SetDrawColor(255, 150, 50, 255)
 					surface.DrawRect(0, h - 2, w * durability, 2)
 				end
-			end
-			
-			function v:GetDescription()
-				local desc = L(self.description or "noDesc")
-				desc = desc .. "\n[*] "..L("DurabilityCondition")..": " .. self:GetData("durability", max) .. "/" .. max
-				return desc
 			end
 		end
 		
@@ -103,25 +104,34 @@ function PLUGIN:InitializedPlugins()
 			icon = "icon16/bullet_wrench.png",
 			OnRun = function(item)
 				local client = item.player
-				local has_remnabor = client:GetCharacter():GetInventory():HasItem("remnabor_weapon")
+				local itemKit = client:GetCharacter():GetInventory():HasItemOfBase("base_repair_kit")
 				
-				if has_remnabor then
-					has_remnabor:Remove()
-					item:SetData("durability", math.Clamp(item:GetData("durability", max) + 25, 0, max))
-					client:EmitSound("interface/inv_repair_kit.ogg", 80)
+				if (itemKit and itemKit.isWeaponKit) then
+					local quantity = itemKit:GetData("quantity", itemKit.quantity or 1) - 1
+					
+					if (quantity < 1) then
+						itemKit:Remove()
+					else
+						itemKit:SetData("quantity", quantity)
+					end
+					
+					item:SetData("durability", math.Clamp(item:GetData("durability", maxDurability) + itemKit.durability, 0, maxDurability))
+					client:EmitSound(itemKit.useSound, 110)
+					
+					itemKit = nil
 				else
 					client:Notify(L("RepairKitWrong"))
 				end	
-
-				has_remnabor = nil
 				
 				return false
 			end,
 			
 			OnCanRun = function(item)
-				if item:GetData("durability", max) >= max then return false end
+				if (item:GetData("durability", maxDurability) >= maxDurability) then
+					return false
+				end
 				
-				if not item.player:GetCharacter():GetInventory():HasItem("remnabor_weapon") then
+				if (!item.player:GetCharacter():GetInventory():HasItemOfBase("base_repair_kit")) then
 					return false
 				end
 				
@@ -131,6 +141,6 @@ function PLUGIN:InitializedPlugins()
 	end
 end
 
-function PLUGIN:CanPlayerEquipItem(client, item)
-	return item:GetData("durability", ix.config.Get("maxValueDurability", 100)) > 0
+function PLUGIN:CanPlayerEquipItem(_, itemObj)
+	return itemObj:GetData("durability", ix.config.Get("maxValueDurability", 100)) > 0
 end
