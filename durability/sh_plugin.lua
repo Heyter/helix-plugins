@@ -15,16 +15,14 @@ ix.config.Add("decDurability", 1, "By how many units do reduce the durability wi
 ix.lang.AddTable("russian", {
  	['Repair'] = "Починить",
 	['RepairKitWrong'] = 'У вас нет ремкомплекта!',
-	['DurabilityUnusableTip'] = 'Ваше оружие теперь полностью сломано!',
-	['DurabilityCondition'] = 'Прочность',
-	['DurabilityArmorTitle'] = "Защита от",
+	['DurabilityUnusableTip'] = 'Оружие теперь полностью сломано!',
+	['DurabilityText'] = 'Прочность',
 })
 
 ix.lang.AddTable("english", {
 	['RepairKitWrong'] = 'You do not have a repair kit!',
 	['DurabilityUnusableTip'] = 'Your weapon is now completely broken!',
-	['DurabilityCondition'] = 'Condition',
-	['DurabilityArmorTitle'] = "Defence from",
+	['DurabilityText'] = 'Durability',
 })
 
 if (SERVER) then
@@ -32,51 +30,45 @@ if (SERVER) then
 		if (IsValid(entity) and entity:IsPlayer()) then
 			local weapon = entity:GetActiveWeapon()
 		
-			if (IsValid(weapon)) then
-				for _, v in pairs(entity:GetCharacter():GetInventory():GetItems()) do
-					if (v.class == weapon:GetClass() and v:GetData("equip", false)) then
-						local durability = v:GetData("durability", v.maxDurability or ix.config.Get("maxValueDurability", 100))
+			if (IsValid(weapon) and weapon.ixItem) then
+				local item = weapon.ixItem
+				
+				if (item.class == weapon:GetClass() and item:GetData("equip", false)) then
+					local durability = item:GetData("durability", item.maxDurability or ix.config.Get("maxValueDurability", 100))
 					
-						if (math.random(1, 16) == 2 and durability > 0) then
-							durability = math.max(durability - ix.config.Get("decDurability", 1), 0)
-							v:SetData("durability", durability)
-						end
-						
-						if (durability < 1 and v.Unequip) then
-							v:Unequip(entity, false, true)
-							entity:Notify(L('DurabilityUnusableTip'))
-						end
-						
-						bullet.Damage = (bullet.Damage / 100) * durability
-						bullet.Spread = bullet.Spread * (1 + (1 - (0.01 * durability)))
-						
-						durability = nil
-						
-						break
+					bullet.Damage = (bullet.Damage / 100) * durability
+					bullet.Spread = bullet.Spread * (1 + (1 - (0.01 * durability)))
+				
+					durability = math.max(durability - ix.config.Get("decDurability", 1), 0)
+					item:SetData("durability", durability)
+					
+					if (durability < 1 and item.Unequip) then
+						item:Unequip(entity)
+						entity:Notify(L('DurabilityUnusableTip'))
 					end
 				end
 			end
 		end
 	end
-end
+else
+	function PLUGIN:PopulateItemTooltip(tooltip, item)
+		if (!item.isWeapon) then
+			return
+		end
 
-function PLUGIN:PopulateItemTooltip(tooltip, item)
-	if (!item.isWeapon) then
-		return
+		local panel = tooltip:AddRowAfter("description", "durability")
+		local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
+		local durability = math.Clamp(math.floor(item:GetData("durability", maxDurability)), 0, maxDurability)
+
+		panel:SetText(Format("%s: %s%% / %s%%", L("DurabilityText"), durability, maxDurability))
+		panel:SetBackgroundColor(Color(219, 52, 52))
+		panel:SizeToContents()
 	end
-	
-	local panel = tooltip:AddRowAfter("description", "durabilityPnl")
-	local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
-	local value = math.Clamp(item:GetData("durability", maxDurability), 0, maxDurability)
-	
-	panel:SetText(Format("%s: %s%% / %s%%", L("DurabilityCondition"), value, maxDurability))
-	panel:SetBackgroundColor(Color(219, 52, 52))
-	panel:SizeToContents()
 end
 
 function PLUGIN:InitializedPlugins()
 	local maxDurability = ix.config.Get("maxValueDurability", 100)
-	
+
 	for _, v in pairs(ix.item.list) do
 		if (!v.isWeapon) then continue end
 		
@@ -89,11 +81,15 @@ function PLUGIN:InitializedPlugins()
 					surface.DrawRect(w - 14, h - 14, 8, 8)
 				end
 				
-				local durability = math.Clamp(item:GetData("durability", maxDurability) / maxDurability, 0, maxDurability)
+				local durability = item:GetData("durability", maxDurability)
+				local durabilityDecimal = math.Clamp(durability / maxDurability, 0, maxDurability)
 				
-				if (durability > 0) then
-					surface.SetDrawColor(255, 150, 50, 255)
-					surface.DrawRect(0, h - 2, w * durability, 2)
+				if (durabilityDecimal > 0) then
+					-- 2.55 = (255 / 100)
+					local durabilityColor = Color(2.55 * (100 - durability), 2.55 * durability, 0, 255)
+					
+					surface.SetDrawColor(durabilityColor)
+					surface.DrawRect(0, h - 2, w * durabilityDecimal, 2)
 				end
 			end
 		end
