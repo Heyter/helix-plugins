@@ -15,14 +15,14 @@ ix.config.Add("decDurability", 1, "By how many units do reduce the durability wi
 ix.lang.AddTable("russian", {
  	['Repair'] = "Починить",
 	['RepairKitWrong'] = 'У вас нет ремкомплекта!',
-	['DurabilityUnusableTip'] = 'Оружие пришло в негодность!',
+	['DurabilityUnusableTip'] = 'Ваше оружие теперь полностью сломано!',
 	['DurabilityCondition'] = 'Прочность',
 	['DurabilityArmorTitle'] = "Защита от",
 })
 
 ix.lang.AddTable("english", {
 	['RepairKitWrong'] = 'You do not have a repair kit!',
-	['DurabilityUnusableTip'] = 'Weapons become unusable!',
+	['DurabilityUnusableTip'] = 'Your weapon is now completely broken!',
 	['DurabilityCondition'] = 'Condition',
 	['DurabilityArmorTitle'] = "Defence from",
 })
