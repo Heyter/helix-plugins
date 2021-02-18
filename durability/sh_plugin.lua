@@ -2,13 +2,17 @@ PLUGIN.name = "Durability"
 PLUGIN.author = "AleXXX_007 ; Hikka"
 PLUGIN.description = "Adds durability for all weapons."
 
+-- HL2 Weapons bullet damage is not counted.
+-- bullet.Damage = (bullet.Damage / 100) * durability
+-- bullet.Damage always 0
+
 ix.config.Add("maxValueDurability", 100, "Maximum value of the durability.", nil, {
 	data = {min = 1, max = 9999},
 	category = PLUGIN.name
 })
 
-ix.config.Add("decDurability", 1, "By how many units do reduce the durability with each shot?", nil, {
-	data = {min = 0.0001, max = 100},
+ix.config.Add("decDurability", 0.5, "By how many units do reduce the durability with each shot?", nil, {
+	data = {min = 0.0001, max = 100, decimals = 4},
 	category = PLUGIN.name
 })
 
@@ -29,22 +33,28 @@ if (SERVER) then
 	function PLUGIN:EntityFireBullets(entity, bullet)
 		if (IsValid(entity) and entity:IsPlayer()) then
 			local weapon = entity:GetActiveWeapon()
-		
+
 			if (IsValid(weapon) and weapon.ixItem) then
 				local item = weapon.ixItem
-				
+
 				if (item.class == weapon:GetClass() and item:GetData("equip", false)) then
+					local originalDamage = bullet.Damage
 					local durability = item:GetData("durability", item.maxDurability or ix.config.Get("maxValueDurability", 100))
-					
-					bullet.Damage = (bullet.Damage / 100) * durability
+
+					bullet.Damage = (originalDamage / 100) * durability
 					bullet.Spread = bullet.Spread * (1 + (1 - (0.01 * durability)))
-				
-					durability = math.max(durability - ix.config.Get("decDurability", 1), 0)
-					item:SetData("durability", durability)
 					
+					if (originalDamage < 1) then
+						durability = math.max(durability - ix.config.Get("decDurability", 1), 0)
+					else
+						durability = math.max(durability - (originalDamage / 100), 0) -- 100 = drainScale
+					end
+					
+					item:SetData("durability", durability)
+
 					if (durability < 1 and item.Unequip) then
 						item:Unequip(entity)
-						entity:Notify(L('DurabilityUnusableTip'))
+						entity:NotifyLocalized('DurabilityUnusableTip')
 					end
 				end
 			end
@@ -116,7 +126,7 @@ function PLUGIN:InitializedPlugins()
 					
 					itemKit = nil
 				else
-					client:Notify(L("RepairKitWrong"))
+					client:NotifyLocalized('RepairKitWrong')
 				end	
 				
 				return false
