@@ -1,5 +1,5 @@
 PLUGIN.name = "CanTool"
-PLUGIN.author = "Hikka"
+PLUGIN.author = "STEAM_0:1:29606990"
 PLUGIN.description = "Overwrite CanTool method"
 
 local NO_DUPLICATE_ENTS = {}
