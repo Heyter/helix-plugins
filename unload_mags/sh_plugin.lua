@@ -1,5 +1,5 @@
 PLUGIN.name = "Unload mags"
-PLUGIN.author = "Hikka"
+PLUGIN.author = "STEAM_0:1:29606990"
 PLUGIN.desc = "Unload mags for weapons."
 
 ix.lang.AddTable("russian", {
