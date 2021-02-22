@@ -1,7 +1,7 @@
 local PLUGIN = PLUGIN
 
 PLUGIN.name = "RE:Vendors"
-PLUGIN.author = "Chessnut, Hikka"
+PLUGIN.author = "STEAM_0:1:29606990" -- Chessnut original code
 PLUGIN.description = "Adds NPC vendors that can sell things."
 
 ix.lang.AddTable("russian", {
