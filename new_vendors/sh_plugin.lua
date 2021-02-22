@@ -56,7 +56,7 @@ if CLIENT then
 					return
 				end
 				
-				local inventory = ix.item.GetInv(item.invID)
+				local inventory = ix.inventory.Get(item.invID)
 				
 				if inventory and inventory.slots and inventory.vars then
 					intPriceVendor = entity:GetPrice(item.uniqueID, not inventory.vars.isNewVendor)
