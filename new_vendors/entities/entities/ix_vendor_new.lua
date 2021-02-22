@@ -75,7 +75,7 @@ if (SERVER) then
 			invID = self:GetID()
 		end
 		
-		local inventory = ix.item.CreateInv(w or 1, h or 1, invID)
+		local inventory = ix.inventory.Create(w or 1, h or 1, invID)
 		
 		inventory.vars.isNewVendor = true
 		inventory.noSave = true
