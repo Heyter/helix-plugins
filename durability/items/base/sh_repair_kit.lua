@@ -14,12 +14,12 @@ ITEM.isWeaponKit = true -- Only allowed for weapons.
 if (CLIENT) then
 	function ITEM:PaintOver(item, w, h)
 		local quantity = item:GetData("quantity", item.quantity or 1)
-		
+
 		if (quantity > 0) then
 			draw.SimpleText(quantity, "DermaDefault", w - 5, h - 5, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, 1, color_black)
 		end
 	end
-	
+
 	function ITEM:GetDescription()
 		return Format(self.description, self.durability)
 	end
