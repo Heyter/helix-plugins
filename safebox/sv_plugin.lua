@@ -86,7 +86,7 @@ function ix.safebox.Restore(client, callback)
 end
 
 net.Receive("ixSafeboxMoneyTake", function(length, client)
-	if (CurTime() < (client.ixSafeboxMoneyTimer or 0) or !ix.config.Get("safeEnableMoney")) then
+	if (!ix.config.Get("safeEnableMoney") or CurTime() < (client.ixSafeboxMoneyTimer or 0)) then
 		return
 	end
 
@@ -120,7 +120,7 @@ net.Receive("ixSafeboxMoneyTake", function(length, client)
 end)
 
 net.Receive("ixStorageMoneyGive", function(length, client)
-	if (CurTime() < (client.ixSafeboxMoneyTimer or 0) or !ix.config.Get("safeEnableMoney")) then
+	if (!ix.config.Get("safeEnableMoney") or CurTime() < (client.ixSafeboxMoneyTimer or 0)) then
 		return
 	end
 
