@@ -1,12 +1,12 @@
 ITEM.name = "Repair Kit Base"
 ITEM.category = "RepairKit"
-ITEM.description = "The repair kit repairs %s%% of the durability."
+ITEM.description = "The repair kit repairs %s units of the durability."
 ITEM.model = "models/props_lab/box01a.mdl"
 ITEM.useSound = "interface/inv_repair_kit.ogg"
 ITEM.width = 1
 ITEM.height = 1
 
-ITEM.durability = 25 -- item:GetData("durability", 100) + ITEM.durability
+ITEM.durability = 25 -- See in ITEM:UseRepair
 ITEM.quantity = 1 -- How many times can an item be used before it is removed?
 
 ITEM.isWeaponKit = true -- Only allowed for weapons.

@@ -104,8 +104,9 @@ else
 		local panel = tooltip:AddRowAfter("description", "durability")
 		local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
 		local durability = math.Clamp(math.floor(item:GetData("durability", maxDurability)), 0, maxDurability)
+		durability = math.max(0, math.floor((durability / maxDurability) * 100))
 
-		panel:SetText(Format("%s: %s%% / %s%%", L("DurabilityText"), durability, maxDurability))
+		panel:SetText(Format("%s: %s%% / 100%%", L("DurabilityText"), durability))
 		panel:SetBackgroundColor(Color(219, 52, 52))
 		panel:SizeToContents()
 	end
@@ -127,14 +128,14 @@ function PLUGIN:InitializedPlugins()
 				end
 
 				local durability = item:GetData("durability", maxDurability)
-				local durabilityDecimal = math.Clamp(durability / maxDurability, 0, maxDurability)
+				local durabilityPercent = math.Clamp(durability / maxDurability, 0, maxDurability)
 
-				if (durabilityDecimal > 0) then
+				if (durabilityPercent > 0) then
 					-- 2.55 = (255 / 100)
 					local durabilityColor = Color(2.55 * (100 - durability), 2.55 * durability, 0, 255)
 
 					surface.SetDrawColor(durabilityColor)
-					surface.DrawRect(0, h - 2, w * durabilityDecimal, 2)
+					surface.DrawRect(0, h - 2, w * durabilityPercent, 2)
 				end
 			end
 		end
