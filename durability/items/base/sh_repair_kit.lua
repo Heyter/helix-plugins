@@ -1,23 +1,29 @@
 ITEM.name = "Repair Kit Base"
 ITEM.category = "RepairKit"
-ITEM.description = "The repair kit repairs %s units of the durability."
+ITEM.description = "The repair kit repairs %s%% units of the durability."
 ITEM.model = "models/props_lab/box01a.mdl"
 ITEM.useSound = "interface/inv_repair_kit.ogg"
 ITEM.width = 1
 ITEM.height = 1
 
-ITEM.durability = 25 -- See in ITEM:UseRepair
-ITEM.quantity = 1 -- How many times can an item be used before it is removed?
+-- Percentage of the difference between maximum and current durability. See in ITEM:UseRepair
+ITEM.durability = 25
 
-ITEM.isWeaponKit = true -- Only allowed for weapons.
+-- How many times can an item be used before it is removed?
+ITEM.quantity = 1
+
+-- Only allowed for weapons.
+ITEM.isWeaponKit = true
 
 if (SERVER) then
 	-- You can override this method in your item.
 	-- item: The current used item.
 	function ITEM:UseRepair(item, client)
 		local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
+		local durability = item:GetData("durability", maxDurability)
+		local amount = math.max(0, (self.durability / 100) * (maxDurability - durability))
 
-		item:SetData("durability", math.Clamp(item:GetData("durability", maxDurability) + self.durability, 0, maxDurability))
+		item:SetData("durability", math.Clamp(math.floor(durability + amount), 0, maxDurability))
 	end
 end
 
