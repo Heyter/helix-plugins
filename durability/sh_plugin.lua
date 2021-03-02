@@ -156,8 +156,13 @@ function PLUGIN:InitializedPlugins()
 						itemKit:SetData("quantity", quantity)
 					end
 
-					item:SetData("durability", math.Clamp(item:GetData("durability", maxDurability) + itemKit.durability, 0, maxDurability))
-					client:EmitSound(itemKit.useSound, 110)
+					if (itemKit.UseRepair) then
+						itemKit:UseRepair(item, client)
+					end
+
+					if (itemKit.useSound) then
+						client:EmitSound(itemKit.useSound, 110)
+					end
 
 					itemKit = nil
 				else
