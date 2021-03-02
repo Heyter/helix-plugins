@@ -14,7 +14,7 @@ ITEM.isWeaponKit = true -- Only allowed for weapons.
 if (SERVER) then
 	-- You can override this method in your item.
 	-- item: The current used item.
-	function ITEM:UseRepair(client, item)
+	function ITEM:UseRepair(item, client)
 		local maxDurability = item.maxDurability or ix.config.Get("maxValueDurability", 100)
 
 		item:SetData("durability", math.Clamp(item:GetData("durability", maxDurability) + self.durability, 0, maxDurability))
