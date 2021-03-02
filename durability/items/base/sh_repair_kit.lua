@@ -1,6 +1,6 @@
 ITEM.name = "Repair Kit Base"
 ITEM.category = "RepairKit"
-ITEM.description = "The repair kit repairs %s%% units of the durability."
+ITEM.description = "The repair kit repairs %s%% of the durability."
 ITEM.model = "models/props_lab/box01a.mdl"
 ITEM.useSound = "interface/inv_repair_kit.ogg"
 ITEM.width = 1
