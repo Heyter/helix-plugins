@@ -13,6 +13,66 @@ ix.arccw_support = ix.arccw_support or {}
 ix.arccw_support.free_atts = ix.arccw_support.free_atts or {}
 ix.arccw_support.atts_slots = {}
 
+-- https://github.com/HaodongMo/ArcCW/blob/master/lua/arccw/shared/sh_attachments.lua#L95
+local function ArcCW_SlotAcceptsAtt(slot, wep, att)
+    local slots = {}
+
+    if isstring(slot) then
+        slots[slot] = true
+    elseif istable(slot) then
+        for _, i in pairs(slot) do
+            slots[i] = true
+        end
+    end
+
+    local atttbl = ArcCW.AttachmentTable[att]
+    if !atttbl then return false end
+
+    if atttbl.Hidden or atttbl.Blacklisted or ArcCW.AttachmentBlacklistTable[att] then return false end
+    if wep.RejectAttachments and wep.RejectAttachments[att] then return false end
+
+    if isstring(atttbl.Slot) then
+        if !slots[atttbl.Slot] then return false end
+    elseif istable(atttbl.Slot) then
+        local yeah = false
+
+        for _, i in pairs(atttbl.Slot) do
+            if slots[i] then
+                yeah = true
+                break
+            end
+        end
+
+        if !yeah then
+            return false
+        end
+    end
+
+    if wep and atttbl.Hook_Compatible then
+        local compat = atttbl.Hook_Compatible(wep, {slot = slot, att = att})
+        if compat == true then
+            return true
+        elseif compat == false then
+            return false
+        end
+    end
+
+    return true
+end
+
+-- https://github.com/HaodongMo/ArcCW/blob/master/lua/arccw/shared/sh_attachments.lua#L25
+local function ArcCW_GetAttsForSlot(slot, wep)
+    local ret = {}
+
+    for id, atttbl in pairs(ArcCW.AttachmentTable) do
+		if (ArcCW_SlotAcceptsAtt(slot, wep, id)) then
+			ret[#ret + 1] = id
+		end
+    end
+
+    return ret
+end
+
 function ix.arccw_support.FindAttachSlot(itemWeapon, attName)
 	local slots = ix.arccw_support.atts_slots[itemWeapon.uniqueID]
 
@@ -257,7 +317,7 @@ function PLUGIN:InitPostEntity()
 							table.Add(slots, k.MergeSlots or {})
 
 							for _, slot in ipairs(slots) do
-								for _, attID in ipairs(ArcCW:GetAttsForSlot((SWEP.Attachments[slot] or {}).Slot, SWEP)) do
+								for _, attID in ipairs(ArcCW_GetAttsForSlot((SWEP.Attachments[slot] or {}).Slot, SWEP)) do
 									if (!item.attachments[attID]) then
 										item.attachments[attID] = slot
 									else
