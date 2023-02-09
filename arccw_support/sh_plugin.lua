@@ -48,14 +48,14 @@ local function ArcCW_SlotAcceptsAtt(slot, wep, att)
         end
     end
 
-    if wep and atttbl.Hook_Compatible then
-        local compat = atttbl.Hook_Compatible(wep, {slot = slot, att = att})
-        if compat == true then
-            return true
-        elseif compat == false then
-            return false
-        end
-    end
+    -- if wep and atttbl.Hook_Compatible then
+        -- local compat = atttbl.Hook_Compatible(wep, {slot = slot, att = att})
+        -- if compat == true then
+            -- return true
+        -- elseif compat == false then
+            -- return false
+        -- end
+    -- end
 
     return true
 end
